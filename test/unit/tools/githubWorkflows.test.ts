@@ -6,11 +6,19 @@ import * as path from 'node:path';
 // resolved from the repo rather than declared directly. The check is skipped
 // rather than made to fail if that ever changes.
 /* eslint-disable @typescript-eslint/no-require-imports -- js-yaml is CommonJS and ships no type declarations. */
+type Step = {
+    name?: string;
+    uses?: string;
+    run?: string;
+    if?: string;
+    env?: Record<string, string>;
+    'continue-on-error'?: boolean;
+};
 type Job = {
     needs?: string | string[];
     if?: string;
     outputs?: Record<string, string>;
-    steps?: Array<{ name?: string; uses?: string; run?: string; if?: string; env?: Record<string, string> }>;
+    steps?: Step[];
 };
 type Workflow = {
     name: string;
@@ -168,6 +176,54 @@ describe('github workflows', function () {
                         step.if,
                         `${workflow.name} / ${name}: "${step.name}" force-updates a tag ref; its guard must restrict it to the rolling autobuild tag`,
                     ).to.include('autobuild');
+                }
+            }
+        }
+    });
+
+    // A container package created by GITHUB_TOKEN defaults to private, and a
+    // private package answers 401 to an anonymous manifest request. Every doc in
+    // this repository tells users to `docker pull ghcr.io/<repo>` without a
+    // login, so if the workflow never flips the visibility that instruction
+    // fails while looking like a wrong tag name.
+    it('should make the pushed container package publicly pullable', () => {
+        // Find the job that pushes an image, then the step in it that fixes the
+        // package visibility.
+        const [, imageJob] = workflows
+            .flatMap((workflow) => Object.entries(workflow.jobs))
+            .find(([, job]) => (job.steps ?? []).some((step) => step.uses?.startsWith('docker/build-push-action@')));
+
+        expect(imageJob, 'a job that pushes a container image is required').to.not.be.undefined;
+
+        const step = imageJob?.steps?.find((candidate) => candidate.run?.includes('visibility=public'));
+
+        expect(step, 'the image job must flip the container package to public').to.not.be.undefined;
+
+        // A pull_request never pushes an image, and a fork PR cannot read this
+        // token at all; running it there would only produce noise.
+        expect(step?.if, 'the visibility step must not run on pull requests').to.be.a('string');
+        expect(step?.if).to.include('!=');
+        expect(step?.if).to.include('pull_request');
+
+        // Visibility is a registry setting, not part of the build. If the token
+        // lacks the scope, or the endpoint changes, the release must still ship
+        // its artefacts rather than go red over a package setting.
+        expect(step?.['continue-on-error'], 'the visibility step must be best-effort').to.equal(true);
+
+        // It must act on this repository's own package, derived from the
+        // repository rather than hardcoded, so a rename cannot leave it patching
+        // a path that no longer exists.
+        expect(step?.run).to.include('/user/packages/container/');
+        expect(step?.run).to.include('${GITHUB_REPOSITORY#*/}');
+    });
+
+    it('should not hardcode the repository name in a workflow', () => {
+        // IMAGE_NAME and the package path both derive from GITHUB_REPOSITORY. A
+        // literal here would survive a rename as a path that no longer exists.
+        for (const workflow of workflows) {
+            for (const job of Object.values(workflow.jobs)) {
+                for (const step of job.steps ?? []) {
+                    expect(step.run ?? '', `${workflow.name}: "${step.name}"`).to.not.include('wojtkob/open-mt2');
                 }
             }
         }
