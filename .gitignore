@@ -8,3 +8,6 @@ motionData
 coverage
 .nyc_output
 dist
+# Release artefacts produced by `npm run package` (tarball, .deb, checksums).
+# Anchored so that `tools/build/` (a source directory) stays tracked.
+/build
