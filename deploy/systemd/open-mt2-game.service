@@ -1,6 +1,6 @@
 [Unit]
 Description=Open MT2 - game server
-Documentation=https://github.com/willianmarquess/open-mt2
+Documentation=https://github.com/wojtkob/open-mt2
 After=network-online.target open-mt2-auth.service
 Wants=network-online.target
 # The game server still boots without Redis/MySQL being up (it retries through

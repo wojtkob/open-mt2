@@ -8,7 +8,7 @@
 # Build the multi-arch manifest with:
 #
 #   docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 \
-#       -t ghcr.io/willianmarquess/open-mt2:latest --push .
+#       -t ghcr.io/wojtkob/open-mt2:latest --push .
 #
 # Both servers live in one image; the role is selected by the command, so a
 # deployment only needs a single image (auth, game) plus its own database and

@@ -1,15 +1,13 @@
 # Open Metin2 - Server Emulator
 
-![GitHub repo size](https://img.shields.io/github/repo-size/willianmarquess/open-mt2?style=for-the-badge)
-![GitHub language count](https://img.shields.io/github/languages/count/willianmarquess/open-mt2?style=for-the-badge)
-![GitHub forks](https://img.shields.io/github/forks/willianmarquess/open-mt2?style=for-the-badge)
+[![GitHub repo size](https://img.shields.io/github/repo-size/wojtkob/open-mt2?style=for-the-badge)](https://github.com/wojtkob/open-mt2)
+[![GitHub language count](https://img.shields.io/github/languages/count/wojtkob/open-mt2?style=for-the-badge)](https://github.com/wojtkob/open-mt2)
+[![GitHub release](https://img.shields.io/github/v/release/wojtkob/open-mt2?style=for-the-badge)](https://github.com/wojtkob/open-mt2/releases)
 
-![CI Pipeline](https://github.com/willianmarquess/open-mt2/actions/workflows/flow.yml/badge.svg)
-![Release](https://github.com/willianmarquess/open-mt2/actions/workflows/release.yml/badge.svg)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=willianmarquess_open-mt2&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=willianmarquess_open-mt2)
-
-[![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-light.svg)](https://sonarcloud.io/summary/new_code?id=willianmarquess_open-mt2)
-[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=willianmarquess_open-mt2)](https://sonarcloud.io/summary/new_code?id=willianmarquess_open-mt2)
+[![CI Pipeline](https://github.com/wojtkob/open-mt2/actions/workflows/flow.yml/badge.svg)](https://github.com/wojtkob/open-mt2/actions/workflows/flow.yml)
+[![ARM64 Release](https://github.com/wojtkob/open-mt2/actions/workflows/release.yml/badge.svg)](https://github.com/wojtkob/open-mt2/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/release/wojtkob/open-mt2.svg)](https://github.com/wojtkob/open-mt2/releases/latest)
+[![GHCR image](https://img.shields.io/badge/ghcr.io%2Fwojtkob%2Fopen--mt2-blue)](https://github.com/wojtkob/open-mt2/pkgs/container/open-mt2)
 
 
 Metin2 JS is an open source implementation of MMORPG Metin2 server using Nodejs with Typescript language.
@@ -88,15 +86,29 @@ npm run package                 # tarball + .deb + SHA256SUMS in build/release/
 npm run package:verify:arm64    # re-open the artefacts and check every entry point
 ```
 
+Every green build on `master` is published automatically as the rolling
+[`autobuild`](https://github.com/wojtkob/open-mt2/releases/tag/autobuild)
+prerelease — no waiting for a tag:
+
 ```bash
 # ARM64 board (Armbian / Debian)
-tar -xzf open-mt2-<version>-linux-arm64.tar.gz && cd open-mt2-<version>
+VERSION=autobuild
+wget "https://github.com/wojtkob/open-mt2/releases/download/$VERSION/open-mt2-<version>-linux-arm64.tar.gz"
+tar -xzf "open-mt2-<version>-linux-arm64.tar.gz" && cd "open-mt2-<version>"
+sha256sum --check --ignore-missing --strict SHA256SUMS   # optional, verifies the download
 sudo ./scripts/install.sh                      # installs two systemd services in /opt/open-mt2
 sudo OPEN_MT2_RUN_MIGRATE=1 ./scripts/install.sh   # also bootstrap the databases
 ```
 
+`--ignore-missing` because the published `SHA256SUMS` covers every artefact in
+the release (both architectures) while you downloaded only one.
+
+`<version>` is the version from the release page. For a fixed release, use a
+`v<version>` tag instead of `autobuild`.
+
 - Full ARM64 install guide: [**docs/arm64.md**](docs/arm64.md) (release package, Docker Compose, from source, troubleshooting)
 - Docker: `docker compose -f docker-compose.arm64.yml up -d` (pins `linux/arm64`)
+- Container images: `ghcr.io/wojtkob/open-mt2` (`linux/amd64`, `linux/arm64`, `linux/arm/v7`)
 
 ## Packets
 
@@ -174,11 +186,11 @@ In this implementation we are using custom commands, described bellow:
 
 ## Auth Flow
 The image bellow show how the client interacts with auth server.
-![](https://github.com/willianmarquess/open-mt2/blob/master/docs/images/mt2-auth-server.drawio.png)
+![](https://github.com/wojtkob/open-mt2/blob/master/docs/images/mt2-auth-server.drawio.png)
 
 ## Game Flow (work in progress)
 The image bellow show how the client interacts with game server.
-![](https://github.com/willianmarquess/open-mt2/blob/master/docs/images/mt2-game-server.drawio.png)
+![](https://github.com/wojtkob/open-mt2/blob/master/docs/images/mt2-game-server.drawio.png)
 
 ## License
 

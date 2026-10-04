@@ -2,39 +2,56 @@ name: Release
 
 # Automated build + publish pipeline.
 #
-# * every push/PR: lint, format check, unit tests, a full build, and a verified
-#   release package for the host architecture;
-# * native `linux/arm64` runner (ubuntu-24.04-arm): the same build, tests and
-#   package verification executed on real aarch64 hardware, plus a relocatability
-#   smoke test of the produced tarball;
+# The release is always produced from a commit that already passed the CI gate
+# (`flow.yml`, "CI Pipeline"):
+#
+# * `workflow_run` on a successful master run of the CI Pipeline — the normal
+#   path. Every green build is published automatically, with no human step.
+# * push of a `v*` tag — a tagged commit is not guaranteed to have passed CI, so
+#   this path runs the gate itself before publishing.
+# * nightly `schedule` — re-publishes the autobuild from master even when nothing
+#   was pushed, which also exercises the ARM64 runner on a fixed schedule.
+# * `workflow_dispatch` — manual rerun, optionally overriding the version.
+#
+# Every path runs:
+#
+# * native `linux/arm64` runner (ubuntu-24.04-arm): the build, the unit tests and
+#   package verification executed on real aarch64 hardware, plus a
+#   relocatability smoke test of the produced tarball. This is the primary
+#   release source and it gates publication — a release is never published from
+#   an artefact set the ARM64 job did not verify;
 # * docker buildx + QEMU: a multi-arch image (amd64 / arm64 / arm-v7) pushed to
-#   GHCR, with the arm64 variant booted under QEMU to prove it starts;
-# * tag `v*`: publish the tarball, the .deb and the checksums as a GitHub
-#   release, and attach the signed-by-digest image reference.
+#   GHCR, with the arm64 variant booted under QEMU to prove it starts.
+#
+# Published artefacts:
+# * `autobuild` — a rolling prerelease rewritten on every successful master
+#   build. This is what a Pine A64 user installs.
+# * `v*` — an immutable semver release, never rewritten.
 on:
   push:
-    branches:
-      - master
     tags:
       - 'v*'
-  pull_request:
+  workflow_run:
+    workflows:
+      - CI Pipeline
     branches:
       - master
+    types:
+      - completed
+  schedule:
+    # 03:17 UTC daily. Deliberately off the hour: the top of the hour is when
+    # every other scheduled workflow on GitHub queues up.
+    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       version:
         description: 'Version to package (defaults to package.json)'
         required: false
         type: string
-      publish:
-        description: 'Publish the container image to GHCR'
-        required: false
-        default: false
-        type: boolean
 
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: true
+  group: release-${{ github.event.workflow_run.head_sha || github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -43,42 +60,130 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   NODE_VERSION: '22'
+  # The commit to build. On `workflow_run` this is the head of the CI run; for
+  # tags, schedules and manual runs it is the triggering commit.
+  RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
-  # ------------------------------------------------------------------ quality
-  quality:
-    name: Lint, format, unit tests
+  # --------------------------------------------------------------------- gate
+  gate:
+    name: Verify the commit is releasable
     runs-on: ubuntu-latest
+    outputs:
+      # Every key the `classify` step writes must be declared here, otherwise
+      # `needs.gate.outputs.<key>` resolves to an empty string downstream and the
+      # artefacts get built with a literal "undefined" version.
+      version: ${{ steps.classify.outputs.version }}
+      short_sha: ${{ steps.classify.outputs.short_sha }}
+      prerelease_version: ${{ steps.classify.outputs.prerelease_version }}
+      prerelease: ${{ steps.classify.outputs.prerelease }}
+      release_tag: ${{ steps.classify.outputs.release_tag }}
+      reason: ${{ steps.classify.outputs.reason }}
     steps:
-      - name: Checkout code
+      - name: Checkout the built commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
 
+      # `workflow_run` fires on completion regardless of outcome. A red CI run
+      # must never become a published release, so it is dropped here before any
+      # runner does real work.
+      - name: Reject a failed CI run
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success'
+        run: |
+          echo "::error::CI Pipeline run ${{ github.event.workflow_run.id }} concluded \
+          '${{ github.event.workflow_run.conclusion }}'; nothing will be published."
+          exit 1
+
+      - name: Reject a CI run from a fork
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.head_repository.full_name != github.repository
+        run: |
+          echo "::error::Refusing to publish artefacts built from \
+          ${{ github.event.workflow_run.head_repository.full_name }}."
+          exit 1
+
+      - name: Classify the run
+        id: classify
+        run: |
+          set -eu
+          sha="${{ env.RELEASE_SHA }}"
+          short="${sha:0:7}"
+          version="$(node -p "require('./package.json').version")"
+
+          if [ -n "${{ inputs.version }}" ]; then
+            version="${{ inputs.version }}"
+          fi
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # An immutable semver release. The tag itself names the version, and
+            # a mismatch means the tag was cut without bumping package.json.
+            if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version."
+              exit 1
+            fi
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "release_tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "reason=tagged release $GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            # The rolling autobuild. Rewritten on every green master build.
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "release_tag=autobuild" >> "$GITHUB_OUTPUT"
+            echo "reason=autobuild of $version from $short ($GITHUB_REF_NAME)" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short" >> "$GITHUB_OUTPUT"
+          echo "prerelease_version=${version}-autobuild.$short" >> "$GITHUB_OUTPUT"
+
+      - name: Log the plan
+        run: |
+          {
+            echo "### Release plan"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| commit | \`${{ env.RELEASE_SHA }}\` |"
+            echo "| tag | \`${{ steps.classify.outputs.release_tag }}\` |"
+            echo "| prerelease | \`${{ steps.classify.outputs.prerelease }}\` |"
+            echo "| reason | ${{ steps.classify.outputs.reason }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Tags, schedules and manual runs are not covered by `flow.yml`, so the
+      # gate has to run here or an untested commit could be published.
       - name: Setup Node.js
+        if: github.event_name != 'workflow_run'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Install dependencies
+        if: github.event_name != 'workflow_run'
         run: npm ci --ignore-scripts
 
       - name: Check Prettier formatting
+        if: github.event_name != 'workflow_run'
         run: npm run format:check
 
       - name: Run Lint
+        if: github.event_name != 'workflow_run'
         run: npm run lint
 
       - name: Run unit tests
+        if: github.event_name != 'workflow_run'
         run: npm run test:unit
 
   # -------------------------------------------------------------- build/package
   build:
     name: Build and package (amd64)
-    needs: quality
+    needs: gate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout code
+      - name: Checkout the built commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -89,18 +194,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Resolve version
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
       - name: Build
         run: npm run build
 
       - name: Package release artefacts
-        run: node tools/package/buildRelease.js --arch amd64 --version "${{ steps.version.outputs.version }}"
+        run: node tools/package/buildRelease.js --arch amd64 --version "${{ needs.gate.outputs.version }}"
 
       - name: Verify release artefacts
-        run: node tools/package/verifyRelease.js --arch amd64 --version "${{ steps.version.outputs.version }}"
+        run: node tools/package/verifyRelease.js --arch amd64 --version "${{ needs.gate.outputs.version }}"
 
       - name: Upload release artefacts
         uses: actions/upload-artifact@v4
@@ -115,8 +216,9 @@ jobs:
   # ------------------------------------------------------- native ARM64 build
   arm64:
     name: Build, test and package (native ARM64)
-    needs: quality
+    needs: gate
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
     steps:
       - name: Report runner architecture
         run: |
@@ -124,8 +226,10 @@ jobs:
           echo "node   : $(node --version 2>/dev/null || echo 'not installed yet')"
           test "$(uname -m)" = "aarch64"
 
-      - name: Checkout code
+      - name: Checkout the built commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -136,10 +240,6 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Resolve version
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
       - name: Build
         run: npm run build
 
@@ -147,14 +247,14 @@ jobs:
         run: npm run test:unit
 
       - name: Package release artefacts
-        run: node tools/package/buildRelease.js --arch arm64 --version "${{ steps.version.outputs.version }}"
+        run: node tools/package/buildRelease.js --arch arm64 --version "${{ needs.gate.outputs.version }}"
 
       - name: Verify release artefacts
-        run: node tools/package/verifyRelease.js --arch arm64 --version "${{ steps.version.outputs.version }}"
+        run: node tools/package/verifyRelease.js --arch arm64 --version "${{ needs.gate.outputs.version }}"
 
       - name: Smoke test the packaged tree from an unrelated working directory
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.gate.outputs.version }}
         run: |
           set -eu
           work_dir="$(mktemp -d)"
@@ -191,14 +291,17 @@ jobs:
   # ------------------------------------------------------------ container image
   docker:
     name: Multi-arch container image
-    needs: quality
+    needs: gate
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Checkout code
+      - name: Checkout the built commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -214,14 +317,13 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+            type=raw,value=autobuild
+            type=raw,value=${{ needs.gate.outputs.version }}
+            type=raw,value=${{ needs.gate.outputs.prerelease_version }}
             type=sha,format=short
 
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -233,7 +335,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64,linux/arm/v7
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -300,54 +402,152 @@ jobs:
   # ------------------------------------------------------------- gitHub release
   release:
     name: Publish GitHub release
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: [build, arm64]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
-      - name: Checkout code
+      - name: Checkout the built commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
 
       - name: Download amd64 artefacts
         uses: actions/download-artifact@v4
         with:
           name: open-mt2-amd64
-          path: build/release
+          path: build/amd64
 
       - name: Download ARM64 artefacts
         uses: actions/download-artifact@v4
         with:
           name: open-mt2-arm64
-          path: build/release
+          path: build/arm64
 
-      - name: Combine checksums
+      - name: Combine artefacts and checksums
         run: |
+          set -eu
+          mkdir -p build/release
+
+          # Each job writes its own SHA256SUMS listing only its own artefacts.
+          # Unpacking both into one directory would let the second file silently
+          # overwrite the first, so download into separate directories and merge
+          # the manifests explicitly here.
+          cat build/amd64/SHA256SUMS > build/release/SHA256SUMS
+          cat build/arm64/SHA256SUMS >> build/release/SHA256SUMS
+          sort -u -k 2 -o build/release/SHA256SUMS build/release/SHA256SUMS
+
+          mv build/amd64/*.tar.gz build/amd64/*.deb build/release/
+          mv build/arm64/*.tar.gz build/arm64/*.deb build/release/
+
           cd build/release
-          # Both artefacts jobs write a SHA256SUMS; merge them into one file that
-          # covers every published artefact.
-          cat SHA256SUMS | sort -u -k 2 > SHA256SUMS.merged
-          mv SHA256SUMS.merged SHA256SUMS
-          cat SHA256SUMS
+          sha256sum --check --strict SHA256SUMS
+          ls -l
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          name: Open MT2 ${{ github.ref_name }}
+          tag_name: ${{ needs.gate.outputs.release_tag }}
+          # Point the rolling tag at the exact commit that was built, so the
+          # autobuild tag never drifts ahead of its own artefacts.
+          target_commitish: ${{ env.RELEASE_SHA }}
+          name: Open MT2 ${{ needs.gate.outputs.version }} (${{ needs.gate.outputs.release_tag }})
+          prerelease: ${{ needs.gate.outputs.prerelease }}
+          # Only a semver tag becomes "latest"; the rolling prerelease must not
+          # take that slot away from a real release.
+          make_latest: ${{ needs.gate.outputs.prerelease == 'false' }}
           body: |
-            Open MT2 release `${{ github.ref_name }}`.
+            Open MT2 `${{ needs.gate.outputs.release_tag }}` — ${{ needs.gate.outputs.reason }}.
+
+            Commit `${{ env.RELEASE_SHA }}`, built and verified on a native
+            `aarch64` runner.
+
+            ## Installing on a Pine A64 (or any ARM64 board)
+
+            ```sh
+            # from the ARM64 package
+            wget https://github.com/${{ github.repository }}/releases/download/${{ needs.gate.outputs.release_tag }}/open-mt2-${{ needs.gate.outputs.version }}-linux-arm64.tar.gz
+            tar -xzf open-mt2-${{ needs.gate.outputs.version }}-linux-arm64.tar.gz
+            cd open-mt2-${{ needs.gate.outputs.version }}
+            sudo ./scripts/install.sh
+            ```
+
+            Or with Docker:
+
+            ```sh
+            docker run -d --name open-mt2 --platform linux/arm64 \
+              -p 11002:11002 -p 13001:13001 \
+              -e DB_HOST=... -e DB_ROOT_PASSWORD=... \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.gate.outputs.release_tag }}
+            ```
 
             The server is architecture independent (pure JavaScript), so the same
             code runs on `amd64`, `arm64` (Pine A64, Raspberry Pi 4/5, Ampere,
-            Graviton) and `armv7l`. Download the ARM64 package and run
-            `sudo ./scripts/install.sh`.
+            Graviton) and `armv7l`.
 
-            Container image: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}`
-            (`linux/amd64`, `linux/arm64`, `linux/arm/v7`).
+            Container image
+            `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.gate.outputs.release_tag }}`
+            — `linux/amd64`, `linux/arm64`, `linux/arm/v7`.
 
-            Install guide: `docs/arm64.md` in the tag.
+            Install guide: [`docs/arm64.md`](https://github.com/${{ github.repository }}/blob/${{ needs.gate.outputs.release_tag }}/docs/arm64.md).
           files: |
             build/release/*.tar.gz
             build/release/*.deb
             build/release/SHA256SUMS
           fail_on_unmatched_files: true
+
+      # The rolling autobuild tag is rewritten on every green build, so its
+      # assets accumulate: each run would otherwise leave the previous build's
+      # tarball and .deb sitting next to the new ones. Pruning runs *after*
+      # publishing so a failed upload never leaves the release empty, and only
+      # assets absent from this run's directory are removed.
+      - name: Prune superseded assets from the rolling autobuild release
+        if: needs.gate.outputs.prerelease == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.gate.outputs.release_tag }}
+        run: |
+          set -eu
+          release_id="$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
+            --jq '.id' 2>/dev/null || true)"
+
+          if [ -z "$release_id" ]; then
+            echo "No existing $TAG release; nothing to prune."
+            exit 0
+          fi
+
+          # The filenames this run published, e.g. "open-mt2-1.0.0-linux-arm64.tar.gz".
+          published="$(cd build/release && ls -1)"
+
+          echo "Pruning assets from release $release_id ($TAG) not in this build:"
+          gh api "repos/${{ github.repository }}/releases/$release_id/assets" \
+            --paginate --jq '.[] | "\(.id)\t\(.name)"' |
+            while IFS=$'\t' read -r id name; do
+              [ -n "$id" ] || continue
+              if printf '%s\n' "$published" | grep -Fxq "$name"; then
+                echo "  keeping   $name"
+              else
+                echo "  deleting  $name"
+                gh api --method DELETE "repos/${{ github.repository }}/releases/assets/$id"
+              fi
+            done
+
+      - name: Release summary
+        env:
+          TAG: ${{ needs.gate.outputs.release_tag }}
+          IS_PRERELEASE: ${{ needs.gate.outputs.prerelease }}
+          SHA: ${{ env.RELEASE_SHA }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          {
+            echo "### Release published"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| tag | [\`$TAG\`](${{ github.server_url }}/${{ github.repository }}/releases/tag/$TAG) |"
+            echo "| version | \`$VERSION\` |"
+            echo "| prerelease | \`$IS_PRERELEASE\` |"
+            echo "| commit | \`$SHA\` |"
+            echo "| image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

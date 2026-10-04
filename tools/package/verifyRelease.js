@@ -72,6 +72,22 @@ const EXECUTABLE_PATHS = [
 const DEB_DATA_ROOT = 'opt/open-mt2';
 const ARCH_ALIASES = { any: 'all', universal: 'all' };
 
+/**
+ * Expected `Homepage:` in the .deb control file. Kept in sync with the packager
+ * by reading it from `package.json#repository`, so a rebrand cannot leave a stale
+ * upstream URL in a published artefact without this check failing.
+ */
+const PROJECT_URL = (() => {
+    const declared =
+        typeof pkg.repository === 'string' ? pkg.repository : pkg.repository && pkg.repository.url;
+
+    if (typeof declared !== 'string' || !declared.startsWith('http')) {
+        return 'https://github.com/wojtkob/open-mt2';
+    }
+
+    return declared.replace(/^(?:git\+)?/, '').replace(/\.git$/, '');
+})();
+
 // -------------------------------------------------------------------- options
 
 function parseArgs(argv) {
@@ -302,6 +318,10 @@ function verifyDeb(debPath, options, report) {
         report.check(
             fields.Version === options.version,
             `.deb Version is "${fields.Version}", expected "${options.version}"`,
+        );
+        report.check(
+            fields.Homepage === PROJECT_URL,
+            `.deb Homepage is "${fields.Homepage}", expected "${PROJECT_URL}"`,
         );
     }
 

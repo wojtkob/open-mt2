@@ -229,7 +229,7 @@ Relevant knobs:
 ```bash
 DB_IMAGE=mariadb:11 docker compose -f docker-compose.arm64.yml up -d
 CACHE_IMAGE=redis:7-alpine docker compose -f docker-compose.arm64.yml up -d
-OPEN_MT2_IMAGE=ghcr.io/willianmarquess/open-mt2:1.0.0 \
+OPEN_MT2_IMAGE=ghcr.io/wojtkob/open-mt2:1.0.0 \
   OPEN_MT2_PULL_POLICY=always \
   docker compose -f docker-compose.arm64.yml up -d
 ```
@@ -247,7 +247,7 @@ few minutes on a Pine A64 — a cross-build elsewhere is much faster.
 
 ```bash
 sudo apt-get install -y git build-essential python3
-git clone https://github.com/willianmarquess/open-mt2.git
+git clone https://github.com/wojtkob/open-mt2.git
 cd open-mt2
 npm ci --ignore-scripts
 cp .env.example .env && $EDITOR .env
@@ -295,16 +295,70 @@ that ignores modes). Run `chmod +x /opt/open-mt2/bin/open-mt2-* /opt/open-mt2/sc
 
 ## 5. Continuous integration
 
-`.github/workflows/release.yml` runs on every push and pull request:
+### The gate — `.github/workflows/flow.yml`
 
-- **quality** — Prettier check, ESLint, unit tests;
+Runs on every pull request and every push to `master`:
+
+- **quality** — `format:check` and `lint` (both read-only; they never rewrite
+  files), a full build, and the unit test suite with coverage;
+- **package** — builds and verifies the ARM64 artefacts, so a broken tarball or
+  `.deb` fails the gate instead of the publish step.
+
+### The release — `.github/workflows/release.yml`
+
+Publishes automatically once a build is green. It is triggered by a successful
+`workflow_run` of the CI Pipeline on `master`, and also by a `v*` tag, a nightly
+`schedule` and `workflow_dispatch`.
+
+A **gate** job runs first and refuses to publish a red or forked build, then
+classifies the run as either the rolling `autobuild` prerelease or an immutable
+semver release. Every job builds the exact commit the CI run tested.
+
 - **build** — compiles and produces + verifies the amd64 package;
 - **arm64** — the same build, the unit test suite and the package verification
   on a **native `ubuntu-24.04-arm` runner**, plus a relocability smoke test that
   extracts the tarball, renames the prefix and resolves the data trees from an
-  unrelated working directory;
+  unrelated working directory. **This job gates publication**: a release is
+  never published from an artefact set the ARM64 job did not verify;
 - **docker** — `buildx` + QEMU builds `linux/amd64`, `linux/arm64` and
-  `linux/arm/v7` and pushes the manifest to GHCR; the arm64 variant is booted
-  under QEMU and its entry points are executed;
-- **release** — on a `v*` tag, publishes the tarball, the `.deb` and
-  `SHA256SUMS` as a GitHub release.
+  `linux/arm/v7` and pushes the manifest to GHCR under the `latest`,
+  `autobuild`, version and prerelease tags; the arm64 variant is booted under
+  QEMU and its entry points are executed;
+- **release** — publishes the tarballs, the `.deb`s and `SHA256SUMS` as a
+  GitHub release. A semver tag becomes the *Latest* release; `autobuild` is a
+  prerelease, is pinned to the exact commit it was built from, and has its
+  superseded assets pruned on every run so it never grows without bound.
+
+### Installing the autobuild
+
+The rolling release is what a Pine A64 user installs:
+
+```sh
+VERSION=autobuild
+wget "https://github.com/wojtkob/open-mt2/releases/download/$VERSION/open-mt2-<version>-linux-arm64.tar.gz"
+tar -xzf "open-mt2-<version>-linux-arm64.tar.gz"
+cd "open-mt2-<version>"
+sudo ./scripts/install.sh
+```
+
+`<version>` is the version on the release page. The filename keeps the
+`package.json` version even under the `autobuild` tag, because the version is
+baked into the artefacts at build time.
+
+`SHA256SUMS` is published next to the artefacts for verification:
+
+```sh
+sha256sum --check --ignore-missing --strict SHA256SUMS
+```
+
+`--ignore-missing` is needed because that one file lists every artefact in the
+release — the amd64 package too — while you only downloaded the ARM64 one.
+Without it, `sha256sum` reports `FAILED open or read` for the files you did not
+download and exits non-zero even though the tarball you have is intact.
+
+Download the amd64 artefacts as well and drop the flag if you want a strict
+check of the whole set.
+
+For a fixed version, cut a `v<version>` tag. The tag must match the
+`package.json` version or the run is rejected, which stops a tag from
+advertising a release that was never built.

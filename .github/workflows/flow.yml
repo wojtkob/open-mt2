@@ -1,5 +1,9 @@
 name: CI Pipeline
 
+# The gate every change has to pass. It runs on pull requests and on every push
+# to master, and it is deliberately read-only: `format` and `lint:fix` rewrite
+# files, which in CI would report success on a commit that is not the one being
+# merged. The checks below only report.
 on:
   push:
     branches:
@@ -8,9 +12,21 @@ on:
     branches:
       - master
 
+# A new push supersedes an in-flight run for the same ref, so a force-push or a
+# rapid series of commits cannot leave several runners racing on the same branch.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: this workflow only ever reads the repository.
+permissions:
+  contents: read
+
 jobs:
-  build:
+  quality:
+    name: Lint, format, build and test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout code
@@ -19,23 +35,67 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22 
+          node-version: 22
+          cache: npm
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Check Prettier
-        run: npm run format
+      - name: Check Prettier formatting
+        run: npm run format:check
 
-      - name: Run Lint
-        run: npm run lint:fix
+      - name: Run ESLint
+        run: npm run lint
 
-      - name: Run Tests with Coverage
+      - name: Build
+        run: npm run build:clean
+
+      - name: Run unit tests with coverage
         run: npm run test:coverage
 
-      - name: Upload Coverage Report
-        if: success()
+      - name: Upload coverage report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  package:
+    name: Verify ARM64 release artefacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # The artefacts are architecture independent (no native modules), so the
+    # packaging path is identical on every runner. Verifying it here means a
+    # broken tarball or .deb fails the gate instead of the publish step.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        run: npm run build:clean
+
+      - name: Build ARM64 release artefacts
+        run: node tools/package/buildRelease.js --arch arm64
+
+      - name: Verify release artefacts
+        run: node tools/package/verifyRelease.js --arch arm64
+
+      - name: Upload release artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-arm64
+          path: build/release/
+          retention-days: 7
+          if-no-files-found: error

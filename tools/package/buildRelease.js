@@ -34,6 +34,29 @@ const pkg = require(path.join(projectRoot, 'package.json'));
 
 const DEFAULT_PREFIX = '/opt/open-mt2';
 
+/**
+ * Project home, taken from `package.json#repository` when it declares one so the
+ * metadata baked into the .deb never drifts from the repo it was built from.
+ */
+const PROJECT_URL = resolveProjectUrl(pkg);
+
+/**
+ * `package.json#repository` may be a plain URL string or the `{ type, url }`
+ * object npm documents; both are accepted, and `git+https://` prefixes are
+ * stripped so the value is usable as a `Homepage:` field.
+ */
+function resolveProjectUrl(packageJson) {
+    const fallback = 'https://github.com/wojtkob/open-mt2';
+    const declared =
+        typeof packageJson.repository === 'string' ? packageJson.repository : packageJson.repository?.url;
+
+    if (typeof declared !== 'string' || !declared.startsWith('http')) {
+        return fallback;
+    }
+
+    return declared.replace(/^(?:git\+)?/, '').replace(/\.git$/, '');
+}
+
 // --------------------------------------------------------------------- options
 
 function parseArgs(argv) {
@@ -313,7 +336,7 @@ function createDebianPackage({ stagingDir, version, arch, mtime, maintainer, des
         InstalledSize: Math.max(1, Math.round(installedSize / 1024)),
         Depends: 'libc6, adduser',
         Suggests: 'mariadb-server | mysql-server, redis-server',
-        Homepage: 'https://github.com/willianmarquess/open-mt2',
+        Homepage: PROJECT_URL,
         Description: description,
     });
 
@@ -429,6 +452,55 @@ function stage(stagingDir, options) {
     }
 }
 
+/**
+ * Matches the artefacts this packager writes, and nothing else.
+ *
+ * The separator is `[-_]` because the two formats differ: the tarball is
+ * `open-mt2-<version>-linux-<arch>.tar.gz` while the .deb is
+ * `open-mt2_<version>_<arch>.deb`. Matching only the hyphen silently skipped
+ * every .deb.
+ *
+ * Deliberately anchored: a file merely containing "open-mt2" (say a stray
+ * `open-mt2-old.tar.gz.bak`) must not be deleted from a user's output
+ * directory.
+ */
+const ARTEFACT_PATTERN = /^open-mt2[-_].*\.(?:tar\.gz|deb)$/;
+
+/**
+ * Remove the artefacts left by a previous run.
+ *
+ * Publishing `build/release/*.tar.gz` has to yield exactly this run's
+ * artefacts. Without this, packaging amd64 straight after arm64 leaves the
+ * arm64 tarball and .deb next to the new ones, and any glob-based upload —
+ * which is what the release workflow does — ships both.
+ *
+ * Directories (notably the `open-mt2-<version>` staging tree) and unrelated
+ * files are left alone.
+ *
+ * @param {string} outDir directory to prune
+ * @returns {string[]} the filenames that were removed
+ */
+function pruneStaleArtefacts(outDir) {
+    if (!fs.existsSync(outDir)) {
+        return [];
+    }
+
+    const removed = [];
+
+    for (const entry of fs.readdirSync(outDir, { withFileTypes: true })) {
+        if (!entry.isFile()) {
+            continue;
+        }
+
+        if (entry.name === 'SHA256SUMS' || ARTEFACT_PATTERN.test(entry.name)) {
+            fs.rmSync(path.join(outDir, entry.name), { force: true });
+            removed.push(entry.name);
+        }
+    }
+
+    return removed.sort();
+}
+
 function main() {
     const options = parseArgs(process.argv.slice(2));
 
@@ -451,6 +523,14 @@ function main() {
     if (options.clean && fs.existsSync(stagingDir)) {
         log('removing the previous staging tree');
         fs.rmSync(stagingDir, { recursive: true, force: true });
+    }
+
+    // Drop artefacts left by a previous run as well, so the glob the release
+    // workflow uploads resolves to this run only.
+    if (options.clean) {
+        for (const name of pruneStaleArtefacts(options.outDir)) {
+            log(`removing stale artefact ${name}`);
+        }
     }
 
     stage(stagingDir, options);
@@ -490,9 +570,15 @@ function main() {
     console.log(sums);
 }
 
-try {
-    main();
-} catch (error) {
-    console.error(`[package] ${error.message}`);
-    process.exit(1);
+module.exports = { pruneStaleArtefacts, resolveProjectUrl, ARTEFACT_PATTERN };
+
+// Only package when executed directly. Requiring this module (as the unit tests
+// do to reach the helpers above) must not start a build.
+if (require.main === module) {
+    try {
+        main();
+    } catch (error) {
+        console.error(`[package] ${error.message}`);
+        process.exit(1);
+    }
 }
