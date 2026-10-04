@@ -251,6 +251,18 @@ function verifyCommonJs(entries, distPrefix, report) {
             manifest.devDependencies === undefined,
             'runtime package.json must not ship devDependencies',
         );
+        // The quests call Promise.withResolvers, so a floor below 22 lets an
+        // install succeed and then fails mid-gameplay with an error that names
+        // neither Node nor the quest. Compare against the source manifest so the
+        // two cannot disagree.
+        report.check(
+            manifest.engines?.node === pkg.engines?.node,
+            `runtime package.json declares engines.node "${manifest.engines?.node}", expected "${pkg.engines?.node}" from package.json`,
+        );
+        report.check(
+            typeof pkg.engines?.node === 'string' && Number.parseInt(pkg.engines.node.replace(/^>=/, ''), 10) >= 22,
+            `package.json engines.node must require at least Node 22, found "${pkg.engines?.node}"`,
+        );
     }
 }
 

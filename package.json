@@ -20,6 +20,9 @@
     "typescript"
   ],
   "main": "dist/game/main.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev:auth": "cross-env LOG_LEVEL=info tsnd -r tsconfig-paths/register --transpile-only --respawn --ignore-watch node_modules --watch src/auth --env-file=.env src/auth/main.ts",
     "dev:game": "cross-env LOG_LEVEL=info tsnd -r tsconfig-paths/register --transpile-only --respawn --ignore-watch node_modules --watch src/game --env-file=.env src/game/main.ts",

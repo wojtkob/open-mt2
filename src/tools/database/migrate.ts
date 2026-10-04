@@ -1,6 +1,9 @@
 import DatabaseManager from '@/core/infra/database/DatabaseManager';
 import Logger from '@/core/infra/logger/Logger';
 import { Config } from '@/core/infra/config/Config';
+import { assertSupportedRuntime } from '@/core/util/nodeVersion';
+
+assertSupportedRuntime();
 
 const REQUIRED_ENV_VARS = ['DB_HOST', 'DB_ROOT_PASSWORD', 'DB_USER', 'DB_PORT'] as const;
 

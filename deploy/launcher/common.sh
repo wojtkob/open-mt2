@@ -9,7 +9,7 @@
 # Resolution order for the Node.js binary:
 #   1. $OPEN_MT2_NODE                       (explicit override)
 #   2. $OPEN_MT2_HOME/runtime/bin/node     (Node downloaded by install.sh)
-#   3. node from PATH                      (system-wide Node >= 20)
+#   3. node from PATH                      (system-wide Node >= 22)
 #
 set -eu
 

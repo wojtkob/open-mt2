@@ -14,6 +14,11 @@ Metin2 JS is an open source implementation of MMORPG Metin2 server using Nodejs 
 
 This project will be developed for fun and study only.
 
+> **Requires Node.js >= 22.** The quests use `Promise.withResolvers`, which
+> older runtimes do not provide. Running the server on Node 20 appears to work
+> and then fails mid-gameplay, so all three entry points check once at start-up
+> and exit with the reason.
+
 Disclaimer: The idea is not to strictly follow the game's original behavior; for some features, the developers will add new behaviors as they see fit, feel free to send suggestions.
 
 Metin2 are copyrighted by [Webzen](http://webzen.com/ "Webzen").
