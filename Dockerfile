@@ -7,8 +7,12 @@
 # `linux/arm64` (Pine A64, Raspberry Pi 4/5, Ampere, Graviton) and `linux/arm/v7`.
 # Build the multi-arch manifest with:
 #
-#   docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 \
+#   docker buildx build --platform linux/amd64,linux/arm64 \
 #       -t ghcr.io/wojtkob/open-mt2:latest --push .
+#
+# `linux/arm/v7` is left out of the manifest on purpose: GitHub's runners cannot
+# emulate armv7 (`tonistiigi/binfmt` rejects it), so publishing it there fails.
+# Add it to `--platform` when building on a host with binfmt support for it.
 #
 # Both servers live in one image; the role is selected by the command, so a
 # deployment only needs a single image (auth, game) plus its own database and

@@ -20,8 +20,14 @@ name: Release
 #   relocatability smoke test of the produced tarball. This is the primary
 #   release source and it gates publication — a release is never published from
 #   an artefact set the ARM64 job did not verify;
-# * docker buildx + QEMU: a multi-arch image (amd64 / arm64 / arm-v7) pushed to
-#   GHCR, with the arm64 variant booted under QEMU to prove it starts.
+# * docker buildx + QEMU: an amd64+arm64 image pushed to GHCR, with the arm64
+#   variant booted under QEMU to prove it starts.
+#
+#   The image manifest deliberately covers only these two platforms. The
+#   tarball and .deb remain valid on armv7 (the server has no native
+#   dependencies), but the runner's `tonistiigi/binfmt` cannot emulate armv7 —
+#   it reports `v7 unsupported architecture: v7`, and the build then dies with
+#   `exec format error`. armv7 users build the image locally instead.
 #
 # Published artefacts:
 # * `autobuild` — a rolling prerelease rewritten on every successful master
@@ -69,6 +75,7 @@ jobs:
   gate:
     name: Verify the commit is releasable
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     outputs:
       # Every key the `classify` step writes must be declared here, otherwise
       # `needs.gate.outputs.<key>` resolves to an empty string downstream and the
@@ -306,7 +313,7 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm64,arm/v7
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -334,7 +341,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -402,7 +409,11 @@ jobs:
   # ------------------------------------------------------------- gitHub release
   release:
     name: Publish GitHub release
-    needs: [build, arm64]
+    # `gate` must be listed here as well as being an indirect dependency through
+    # build/arm64: GitHub Actions only exposes the outputs of jobs named in this
+    # job's own `needs`, so referencing needs.gate.outputs.* without it silently
+    # yields empty strings (an empty tag_name fails the release outright).
+    needs: [gate, build, arm64]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -483,12 +494,13 @@ jobs:
             ```
 
             The server is architecture independent (pure JavaScript), so the same
-            code runs on `amd64`, `arm64` (Pine A64, Raspberry Pi 4/5, Ampere,
-            Graviton) and `armv7l`.
+            tarball and `.deb` run on `amd64`, `arm64` (Pine A64, Raspberry Pi 4/5,
+            Ampere, Graviton) and `armv7l`.
 
             Container image
             `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.gate.outputs.release_tag }}`
-            — `linux/amd64`, `linux/arm64`, `linux/arm/v7`.
+            — `linux/amd64`, `linux/arm64`. On armv7, build the image locally from
+            the `Dockerfile`; the published manifest omits that platform.
 
             Install guide: [`docs/arm64.md`](https://github.com/${{ github.repository }}/blob/${{ needs.gate.outputs.release_tag }}/docs/arm64.md).
           files: |

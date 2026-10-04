@@ -77,9 +77,9 @@ Metin2 are copyrighted by [Webzen](http://webzen.com/ "Webzen").
 
 ## Deployment
 
-Open MT2 is pure JavaScript with **no native dependencies**, so the same build runs on
-`linux/amd64`, `linux/arm64` (Pine A64, Raspberry Pi 4/5, Ampere, Graviton) and
-`linux/arm/v7`.
+Open MT2 is pure JavaScript with **no native dependencies**, so the same tarball
+and `.deb` run on `linux/amd64`, `linux/arm64` (Pine A64, Raspberry Pi 4/5, Ampere,
+Graviton) and `linux/arm/v7`.
 
 ```bash
 npm run package                 # tarball + .deb + SHA256SUMS in build/release/
@@ -108,7 +108,9 @@ the release (both architectures) while you downloaded only one.
 
 - Full ARM64 install guide: [**docs/arm64.md**](docs/arm64.md) (release package, Docker Compose, from source, troubleshooting)
 - Docker: `docker compose -f docker-compose.arm64.yml up -d` (pins `linux/arm64`)
-- Container images: `ghcr.io/wojtkob/open-mt2` (`linux/amd64`, `linux/arm64`, `linux/arm/v7`)
+- Container images: `ghcr.io/wojtkob/open-mt2` (`linux/amd64`, `linux/arm64`). The
+  published manifest omits `arm/v7` because the CI runner cannot emulate it —
+  on armv7, build the image locally from the `Dockerfile`
 
 ## Packets
 

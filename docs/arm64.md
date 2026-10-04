@@ -320,10 +320,13 @@ semver release. Every job builds the exact commit the CI run tested.
   extracts the tarball, renames the prefix and resolves the data trees from an
   unrelated working directory. **This job gates publication**: a release is
   never published from an artefact set the ARM64 job did not verify;
-- **docker** — `buildx` + QEMU builds `linux/amd64`, `linux/arm64` and
-  `linux/arm/v7` and pushes the manifest to GHCR under the `latest`,
-  `autobuild`, version and prerelease tags; the arm64 variant is booted under
-  QEMU and its entry points are executed;
+- **docker** — `buildx` + QEMU builds `linux/amd64` and `linux/arm64` and pushes
+  the manifest to GHCR under the `latest`, `autobuild`, version and prerelease
+  tags; the arm64 variant is booted under QEMU and its entry points are
+  executed. The manifest omits `linux/arm/v7` because GitHub's runners cannot
+  emulate armv7 (`tonistiigi/binfmt` rejects it), which fails the build with
+  `exec format error`. On an armv7 board, build the image locally with
+  `docker build .` — the tarball and `.deb` work on armv7 regardless;
 - **release** — publishes the tarballs, the `.deb`s and `SHA256SUMS` as a
   GitHub release. A semver tag becomes the *Latest* release; `autobuild` is a
   prerelease, is pinned to the exact commit it was built from, and has its
