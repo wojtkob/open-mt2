@@ -82,7 +82,7 @@ const PROJECT_URL = (() => {
         typeof pkg.repository === 'string' ? pkg.repository : pkg.repository && pkg.repository.url;
 
     if (typeof declared !== 'string' || !declared.startsWith('http')) {
-        return 'https://github.com/wojtkob/open-mt2';
+        return 'https://github.com/wojtkob/open-mt2-chamber';
     }
 
     return declared.replace(/^(?:git\+)?/, '').replace(/\.git$/, '');
@@ -250,6 +250,18 @@ function verifyCommonJs(entries, distPrefix, report) {
         report.check(
             manifest.devDependencies === undefined,
             'runtime package.json must not ship devDependencies',
+        );
+        // The quests call Promise.withResolvers, so a floor below 22 lets an
+        // install succeed and then fails mid-gameplay with an error that names
+        // neither Node nor the quest. Compare against the source manifest so the
+        // two cannot disagree.
+        report.check(
+            manifest.engines?.node === pkg.engines?.node,
+            `runtime package.json declares engines.node "${manifest.engines?.node}", expected "${pkg.engines?.node}" from package.json`,
+        );
+        report.check(
+            typeof pkg.engines?.node === 'string' && Number.parseInt(pkg.engines.node.replace(/^>=/, ''), 10) >= 22,
+            `package.json engines.node must require at least Node 22, found "${pkg.engines?.node}"`,
         );
     }
 }

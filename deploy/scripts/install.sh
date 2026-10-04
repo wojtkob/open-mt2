@@ -80,17 +80,21 @@ fi
 chmod +x "$PREFIX"/bin/open-mt2-* "$PREFIX"/scripts/*.sh 2>/dev/null || true
 
 # ------------------------------------------------------------------- runtime
+# The quests use `Promise.withResolvers`, which is Node 22+. A system Node 20
+# loads the containers without complaint and only fails once a quest opens a
+# choice window, so anything below 22 is treated as absent and replaced.
+MIN_NODE_MAJOR=22
 node_major=0
 if command -v node >/dev/null 2>&1; then
     node_major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
 fi
 
-if [ "$node_major" -ge 20 ]; then
+if [ "$node_major" -ge "$MIN_NODE_MAJOR" ]; then
     log "Using system Node.js $(node --version)"
 elif [ "${OPEN_MT2_SKIP_NODE_DOWNLOAD:-0}" = "1" ]; then
-    die "Node.js >= 20 not found and OPEN_MT2_SKIP_NODE_DOWNLOAD=1"
+    die "Node.js >= $MIN_NODE_MAJOR not found and OPEN_MT2_SKIP_NODE_DOWNLOAD=1"
 else
-    log "No Node.js >= 20 found, installing a private runtime into $PREFIX/runtime"
+    log "No Node.js >= $MIN_NODE_MAJOR found, installing a private runtime into $PREFIX/runtime"
     OPEN_MT2_HOME="$PREFIX" "$PREFIX/scripts/install-node.sh"
 fi
 

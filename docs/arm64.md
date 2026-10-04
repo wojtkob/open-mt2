@@ -93,8 +93,11 @@ sudo apt-get install -y mariadb-server redis-server    # or use Docker, see belo
 ```
 
 On Armbian the equivalent packages are `mariadb-server` and `redis-server`.
-Armbian ships Node.js 20+ as `nodejs`, but many images ship an older major
-version; see [1.9 Node runtime](#19-node-runtime) if `node --version` is below 20.
+Armbian ships Node.js 20+ as `nodejs`, but the servers need **Node.js 22 or
+newer** (`Promise.withResolvers`), so many images ship too old a major version.
+`scripts/install.sh` installs a private 22.x runtime when it finds an older one;
+see [1.9 Node runtime](#19-node-runtime) if you set
+`OPEN_MT2_SKIP_NODE_DOWNLOAD=1`.
 
 ### 1.3 Install from the tarball
 
@@ -199,7 +202,7 @@ sudo /opt/open-mt2/scripts/uninstall.sh
 
 ### 1.9 Node runtime
 
-The installer accepts a system Node.js >= 20. If the board has an older one, it
+The installer accepts a system Node.js >= 22. If the board has an older one, it
 downloads a private ARM64 runtime:
 
 ```bash
@@ -229,10 +232,15 @@ Relevant knobs:
 ```bash
 DB_IMAGE=mariadb:11 docker compose -f docker-compose.arm64.yml up -d
 CACHE_IMAGE=redis:7-alpine docker compose -f docker-compose.arm64.yml up -d
-OPEN_MT2_IMAGE=ghcr.io/wojtkob/open-mt2:1.0.0 \
+OPEN_MT2_IMAGE=ghcr.io/wojtkob/open-mt2-chamber:1.1.0 \
   OPEN_MT2_PULL_POLICY=always \
   docker compose -f docker-compose.arm64.yml up -d
 ```
+
+> The image path follows the repository name, which is now
+> `ghcr.io/wojtkob/open-mt2-chamber`. Releases published before the rename live
+> under `ghcr.io/wojtkob/open-mt2`; that path is frozen and no longer receives
+> builds, so switch to the new one.
 
 Run the migration inside a container:
 
@@ -247,7 +255,7 @@ few minutes on a Pine A64 — a cross-build elsewhere is much faster.
 
 ```bash
 sudo apt-get install -y git build-essential python3
-git clone https://github.com/wojtkob/open-mt2.git
+git clone https://github.com/wojtkob/open-mt2-chamber.git
 cd open-mt2
 npm ci --ignore-scripts
 cp .env.example .env && $EDITOR .env
@@ -274,8 +282,10 @@ A stale `dist/` produced without `tsc-alias`. Run `npm run build:clean` and
 rebuild; never start the compiled server with `-r tsconfig-paths/register`
 (that package is a devDependency and is not shipped).
 
-**`open-mt2: Node.js 20+ is required, found v18...`**
-Install Node 20+ system-wide, or run `sudo /opt/open-mt2/scripts/install-node.sh`.
+**`open-mt2 cannot start on this Node.js runtime: Node.js v20.x is too old...`**
+The quests need `Promise.withResolvers`, which is Node.js 22+. Install Node 22+
+system-wide, or run `sudo /opt/open-mt2/scripts/install-node.sh` to place a
+private 22.x runtime under `/opt/open-mt2/runtime`.
 
 **`mysql: no matching manifest for linux/arm64`**
 A leftover `mysql:5.7` reference. Use `mysql:8.0`, `mysql:8.4`, `mariadb:11` or
@@ -338,7 +348,7 @@ The rolling release is what a Pine A64 user installs:
 
 ```sh
 VERSION=autobuild
-wget "https://github.com/wojtkob/open-mt2/releases/download/$VERSION/open-mt2-<version>-linux-arm64.tar.gz"
+wget "https://github.com/wojtkob/open-mt2-chamber/releases/download/$VERSION/open-mt2-<version>-linux-arm64.tar.gz"
 tar -xzf "open-mt2-<version>-linux-arm64.tar.gz"
 cd "open-mt2-<version>"
 sudo ./scripts/install.sh

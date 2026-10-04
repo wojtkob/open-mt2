@@ -1,6 +1,6 @@
 [Unit]
 Description=Open MT2 - authentication server
-Documentation=https://github.com/wojtkob/open-mt2
+Documentation=https://github.com/wojtkob/open-mt2-chamber
 After=network-online.target
 Wants=network-online.target
 

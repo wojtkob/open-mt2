@@ -1,5 +1,8 @@
 import GameApplication from './app/GameApplication';
 import { container } from './Container';
+import { assertSupportedRuntime } from '@/core/util/nodeVersion';
+
+assertSupportedRuntime();
 
 const app = new GameApplication(container.cradle as any);
 

@@ -1,5 +1,8 @@
 import { container } from '@/auth/Container';
 import AuthApplication from '@/auth/app/AuthApplication';
+import { assertSupportedRuntime } from '@/core/util/nodeVersion';
+
+assertSupportedRuntime();
 
 const app = new AuthApplication(container.cradle as any);
 

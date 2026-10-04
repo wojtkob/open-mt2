@@ -2,10 +2,11 @@
 #
 # Downloads a private Node.js runtime into $OPEN_MT2_HOME/runtime.
 #
-# Why this exists: Armbian/Debian ship Node 18 in the main archive, while this
-# project needs >= 20 (`module: nodenext`, `--env-file`). Rather than mutating
-# the host package database we install a private, self-contained runtime under
-# the application prefix, which the launchers pick up automatically.
+# Why this exists: Armbian/Debian ship Node 18 or 20 in the main archive, while
+# this project needs >= 22 (`Promise.withResolvers`, `module: nodenext`,
+# `--env-file`). Rather than mutating the host package database we install a
+# private, self-contained runtime under the application prefix, which the
+# launchers pick up automatically.
 #
 # The tarball is verified against the SHASUMS256.txt published by nodejs.org
 # before anything is extracted. Nothing outside $OPEN_MT2_HOME is touched.

@@ -46,7 +46,7 @@ const PROJECT_URL = resolveProjectUrl(pkg);
  * stripped so the value is usable as a `Homepage:` field.
  */
 function resolveProjectUrl(packageJson) {
-    const fallback = 'https://github.com/wojtkob/open-mt2';
+    const fallback = 'https://github.com/wojtkob/open-mt2-chamber';
     const declared =
         typeof packageJson.repository === 'string' ? packageJson.repository : packageJson.repository?.url;
 
@@ -414,6 +414,16 @@ function stage(stagingDir, options) {
         'utf8',
     );
 
+    // The Node floor is taken from the manifest rather than repeated here. The
+    // quests need `Promise.withResolvers` (Node 22), and an artefact that
+    // advertises a lower floor than the code actually supports fails mid
+    // gameplay instead of at install time.
+    const nodeEngine = pkg.engines?.node;
+
+    if (typeof nodeEngine !== 'string' || !nodeEngine.trim()) {
+        throw new Error('package.json must declare engines.node so the release cannot understate the runtime requirement');
+    }
+
     // Production package.json: only what is needed to `require()` the tree.
     const runtimePackage = {
         name: 'open-mt2',
@@ -424,7 +434,7 @@ function stage(stagingDir, options) {
         type: 'commonjs',
         main: 'dist/game/main.js',
         dependencies: pkg.dependencies,
-        engines: { node: '>=20' },
+        engines: { node: nodeEngine },
     };
     fs.writeFileSync(
         path.join(stagingDir, 'package.json'),
