@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# Debian maintainer script — stop the services before the files go away.
+#
+set -e
+
+if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+    for unit in open-mt2-game open-mt2-auth; do
+        systemctl stop "$unit.service" >/dev/null 2>&1 || true
+        systemctl disable "$unit.service" >/dev/null 2>&1 || true
+    done
+fi
+
+exit 0

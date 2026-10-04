@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# Applies the database bootstrap script (drops and recreates the `auth` and
+# `game` databases, then seeds the admin accounts).
+#
+# WARNING: this is destructive by design — run it only on a fresh install or
+# when you intentionally want to reset the world.
+set -eu
+
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=deploy/launcher/common.sh
+. "$SCRIPT_DIR/common.sh"
+
+open_mt2_run "$OPEN_MT2_HOME/dist/tools/database/migrate.js" "$@"

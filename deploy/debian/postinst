@@ -1,0 +1,26 @@
+#!/bin/sh
+#
+# Debian maintainer script — delegates to the shipped installer so a `dpkg -i`
+# install and a manual `scripts/install.sh` run end up in exactly the same state.
+#
+set -e
+
+PREFIX=/opt/open-mt2
+INSTALLER="$PREFIX/scripts/install.sh"
+
+[ -x "$INSTALLER" ] || { echo "open-mt2: $INSTALLER is missing or not executable" >&2; exit 1; }
+
+# The .deb always installs into /opt/open-mt2 with /etc/open-mt2/env.
+export PREFIX
+export ENV_DIR=/etc/open-mt2
+export ENV_FILE=/etc/open-mt2/env
+
+# Never recurse into ourselves, and never leave the host without Node.js.
+export OPEN_MT2_AUTOSTART=${OPEN_MT2_AUTOSTART:-0}
+export OPEN_MT2_RUN_MIGRATE=${OPEN_MT2_RUN_MIGRATE:-0}
+
+# `set -e` plus `|| true` keeps a missing/failed systemd reload from aborting
+# the installation (containers and chroots legitimately have no systemd).
+"$INSTALLER" || { echo "open-mt2: installer failed" >&2; exit 1; }
+
+exit 0

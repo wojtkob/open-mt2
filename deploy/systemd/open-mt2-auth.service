@@ -1,0 +1,42 @@
+[Unit]
+Description=Open MT2 - authentication server
+Documentation=https://github.com/willianmarquess/open-mt2
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=open-mt2
+Group=open-mt2
+WorkingDirectory=/opt/open-mt2
+EnvironmentFile=-/etc/open-mt2/env
+Environment=NODE_ENV=production
+Environment=OPEN_MT2_HOME=/opt/open-mt2
+ExecStart=/opt/open-mt2/bin/open-mt2-auth
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# The auth server only speaks TCP with the client and talks to MySQL/Redis, so
+# it needs no capabilities at all.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+
+# Memory ceiling tuned for a 512MB..2GB ARM board (Pine A64). Raise on bigger
+# hosts; the game server is the one that actually needs the heap.
+MemoryMax=512M
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=open-mt2-auth
+
+[Install]
+WantedBy=multi-user.target

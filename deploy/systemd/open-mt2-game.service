@@ -1,0 +1,44 @@
+[Unit]
+Description=Open MT2 - game server
+Documentation=https://github.com/willianmarquess/open-mt2
+After=network-online.target open-mt2-auth.service
+Wants=network-online.target
+# The game server still boots without Redis/MySQL being up (it retries through
+# the pool), so this is a soft ordering only.
+Wants=open-mt2-auth.service
+
+[Service]
+Type=simple
+User=open-mt2
+Group=open-mt2
+WorkingDirectory=/opt/open-mt2
+EnvironmentFile=-/etc/open-mt2/env
+Environment=NODE_ENV=production
+Environment=OPEN_MT2_HOME=/opt/open-mt2
+ExecStart=/opt/open-mt2/bin/open-mt2-game
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+KillSignal=SIGTERM
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+
+# The world, mobs and item prototypes are held in memory (items.json alone is
+# ~5MB of JSON). 1024M is comfortable on a Pine A64 with 2GB; drop to ~700M on
+# a 1GB board and let the container/swap absorb the rest.
+MemoryMax=1024M
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=open-mt2-game
+
+[Install]
+WantedBy=multi-user.target
