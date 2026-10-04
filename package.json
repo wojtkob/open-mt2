@@ -53,7 +53,7 @@
     "package:verify:universal": "node tools/package/verifyRelease.js --arch universal",
     "docker:arm64": "docker compose -f docker-compose.arm64.yml up -d",
     "docker:build:arm64": "docker buildx build --platform linux/arm64 -t open-mt2:arm64 --load .",
-    "docker:build:multiarch": "docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t open-mt2:multiarch ."
+    "docker:build:multiarch": "docker buildx build --platform linux/amd64,linux/arm64 -t open-mt2:multiarch ."
   },
   "author": "Willian Marques (willian.goncalves4@gmail.com)",
   "license": "ISC",
