@@ -82,7 +82,7 @@ const PROJECT_URL = (() => {
         typeof pkg.repository === 'string' ? pkg.repository : pkg.repository && pkg.repository.url;
 
     if (typeof declared !== 'string' || !declared.startsWith('http')) {
-        return 'https://github.com/wojtkob/open-mt2';
+        return 'https://github.com/wojtkob/open-mt2-chamber';
     }
 
     return declared.replace(/^(?:git\+)?/, '').replace(/\.git$/, '');

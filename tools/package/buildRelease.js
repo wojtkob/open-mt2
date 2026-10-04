@@ -46,7 +46,7 @@ const PROJECT_URL = resolveProjectUrl(pkg);
  * stripped so the value is usable as a `Homepage:` field.
  */
 function resolveProjectUrl(packageJson) {
-    const fallback = 'https://github.com/wojtkob/open-mt2';
+    const fallback = 'https://github.com/wojtkob/open-mt2-chamber';
     const declared =
         typeof packageJson.repository === 'string' ? packageJson.repository : packageJson.repository?.url;
 

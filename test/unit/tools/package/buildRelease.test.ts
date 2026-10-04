@@ -127,18 +127,20 @@ describe('buildRelease', () => {
     describe('resolveProjectUrl', () => {
         it('should read the { type, url } object form npm documents', () => {
             expect(
-                resolveProjectUrl({ repository: { type: 'git', url: 'git+https://github.com/wojtkob/open-mt2.git' } }),
-            ).to.equal('https://github.com/wojtkob/open-mt2');
+                resolveProjectUrl({
+                    repository: { type: 'git', url: 'git+https://github.com/wojtkob/open-mt2-chamber.git' },
+                }),
+            ).to.equal('https://github.com/wojtkob/open-mt2-chamber');
         });
 
         it('should read a plain string form', () => {
-            expect(resolveProjectUrl({ repository: 'https://github.com/wojtkob/open-mt2' })).to.equal(
-                'https://github.com/wojtkob/open-mt2',
+            expect(resolveProjectUrl({ repository: 'https://github.com/wojtkob/open-mt2-chamber' })).to.equal(
+                'https://github.com/wojtkob/open-mt2-chamber',
             );
         });
 
         it('should fall back when the manifest declares no usable repository', () => {
-            const fallback = 'https://github.com/wojtkob/open-mt2';
+            const fallback = 'https://github.com/wojtkob/open-mt2-chamber';
 
             expect(resolveProjectUrl({})).to.equal(fallback);
             expect(resolveProjectUrl({ repository: undefined })).to.equal(fallback);
@@ -151,7 +153,7 @@ describe('buildRelease', () => {
 
             // The fallback is deliberate: this repository is standalone, so an
             // unrecognised value resolves here rather than to the old fork.
-            expect(url).to.equal('https://github.com/wojtkob/open-mt2');
+            expect(url).to.equal('https://github.com/wojtkob/open-mt2-chamber');
         });
     });
 });

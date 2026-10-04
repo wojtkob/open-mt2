@@ -229,10 +229,15 @@ Relevant knobs:
 ```bash
 DB_IMAGE=mariadb:11 docker compose -f docker-compose.arm64.yml up -d
 CACHE_IMAGE=redis:7-alpine docker compose -f docker-compose.arm64.yml up -d
-OPEN_MT2_IMAGE=ghcr.io/wojtkob/open-mt2:1.0.0 \
+OPEN_MT2_IMAGE=ghcr.io/wojtkob/open-mt2-chamber:1.1.0 \
   OPEN_MT2_PULL_POLICY=always \
   docker compose -f docker-compose.arm64.yml up -d
 ```
+
+> The image path follows the repository name, which is now
+> `ghcr.io/wojtkob/open-mt2-chamber`. Releases published before the rename live
+> under `ghcr.io/wojtkob/open-mt2`; that path is frozen and no longer receives
+> builds, so switch to the new one.
 
 Run the migration inside a container:
 
@@ -247,7 +252,7 @@ few minutes on a Pine A64 — a cross-build elsewhere is much faster.
 
 ```bash
 sudo apt-get install -y git build-essential python3
-git clone https://github.com/wojtkob/open-mt2.git
+git clone https://github.com/wojtkob/open-mt2-chamber.git
 cd open-mt2
 npm ci --ignore-scripts
 cp .env.example .env && $EDITOR .env
@@ -338,7 +343,7 @@ The rolling release is what a Pine A64 user installs:
 
 ```sh
 VERSION=autobuild
-wget "https://github.com/wojtkob/open-mt2/releases/download/$VERSION/open-mt2-<version>-linux-arm64.tar.gz"
+wget "https://github.com/wojtkob/open-mt2-chamber/releases/download/$VERSION/open-mt2-<version>-linux-arm64.tar.gz"
 tar -xzf "open-mt2-<version>-linux-arm64.tar.gz"
 cd "open-mt2-<version>"
 sudo ./scripts/install.sh

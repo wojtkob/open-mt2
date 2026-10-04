@@ -8,7 +8,7 @@
 # Build the multi-arch manifest with:
 #
 #   docker buildx build --platform linux/amd64,linux/arm64 \
-#       -t ghcr.io/wojtkob/open-mt2:latest --push .
+#       -t ghcr.io/wojtkob/open-mt2-chamber:latest --push .
 #
 # `linux/arm/v7` is left out of the manifest on purpose: GitHub's runners cannot
 # emulate armv7 (`tonistiigi/binfmt` rejects it), so publishing it there fails.
