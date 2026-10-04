@@ -232,15 +232,17 @@ Relevant knobs:
 ```bash
 DB_IMAGE=mariadb:11 docker compose -f docker-compose.arm64.yml up -d
 CACHE_IMAGE=redis:7-alpine docker compose -f docker-compose.arm64.yml up -d
-OPEN_MT2_IMAGE=ghcr.io/wojtkob/open-mt2-chamber:1.1.0 \
+OPEN_MT2_IMAGE=ghcr.io/wojtkob/open-mt2:1.1.0 \
   OPEN_MT2_PULL_POLICY=always \
   docker compose -f docker-compose.arm64.yml up -d
 ```
 
-> The image path follows the repository name, which is now
-> `ghcr.io/wojtkob/open-mt2-chamber`. Releases published before the rename live
-> under `ghcr.io/wojtkob/open-mt2`; that path is frozen and no longer receives
-> builds, so switch to the new one.
+> This repository was renamed from `wojtkob/open-mt2` to
+> `wojtkob/open-mt2-chamber`, but the container image keeps its original path
+> `ghcr.io/wojtkob/open-mt2`. A GHCR package stays bound to the repository that
+> first pushed it, so a renamed repository cannot publish under a matching image
+> name without a token that owns that package. Keeping the path means existing
+> `docker pull` commands and Compose files do not break.
 
 Run the migration inside a container:
 

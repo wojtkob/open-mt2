@@ -7,7 +7,7 @@
 [![CI Pipeline](https://github.com/wojtkob/open-mt2-chamber/actions/workflows/flow.yml/badge.svg)](https://github.com/wojtkob/open-mt2-chamber/actions/workflows/flow.yml)
 [![ARM64 Release](https://github.com/wojtkob/open-mt2-chamber/actions/workflows/release.yml/badge.svg)](https://github.com/wojtkob/open-mt2-chamber/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/release/wojtkob/open-mt2-chamber.svg)](https://github.com/wojtkob/open-mt2-chamber/releases/latest)
-[![GHCR image](https://img.shields.io/badge/ghcr.io%2Fwojtkob%2Fopen--mt2--chamber-blue)](https://github.com/wojtkob/open-mt2-chamber/pkgs/container/open-mt2-chamber)
+[![GHCR image](https://img.shields.io/badge/ghcr.io%2Fwojtkob%2Fopen--mt2-blue)](https://github.com/wojtkob/open-mt2-chamber/pkgs/container/open-mt2)
 
 
 Metin2 JS is an open source implementation of MMORPG Metin2 server using Nodejs with Typescript language.
@@ -113,9 +113,12 @@ the release (both architectures) while you downloaded only one.
 
 - Full ARM64 install guide: [**docs/arm64.md**](docs/arm64.md) (release package, Docker Compose, from source, troubleshooting)
 - Docker: `docker compose -f docker-compose.arm64.yml up -d` (pins `linux/arm64`)
-- Container images: `ghcr.io/wojtkob/open-mt2-chamber` (`linux/amd64`, `linux/arm64`). The
+- Container images: `ghcr.io/wojtkob/open-mt2` (`linux/amd64`, `linux/arm64`). The
   published manifest omits `arm/v7` because the CI runner cannot emulate it —
-  on armv7, build the image locally from the `Dockerfile`
+  on armv7, build the image locally from the `Dockerfile`. The image path is
+  unchanged by the rename of this repository to `open-mt2-chamber`: a GHCR
+  package stays bound to the repository that first pushed it, so keeping the
+  original path means every existing `docker pull` keeps working
 
 ## Packets
 

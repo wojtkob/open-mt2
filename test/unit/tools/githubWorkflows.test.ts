@@ -214,18 +214,40 @@ describe('github workflows', function () {
         // repository rather than hardcoded, so a rename cannot leave it patching
         // a path that no longer exists.
         expect(step?.run).to.include('/user/packages/container/');
-        expect(step?.run).to.include('${GITHUB_REPOSITORY#*/}');
+        // It must resolve the package from IMAGE_NAME, not from the repository
+        // name: the image path is pinned, so the repository name would point the
+        // PATCH at a package this workflow never pushes to.
+        expect(step?.run).to.include('${IMAGE_NAME##*/}');
+        // The assertion targets executable lines: the explanatory comment above
+        // mentions GITHUB_REPOSITORY by name while explaining why it is unused.
+        const commands = (step?.run ?? '')
+            .split('\n')
+            .filter((line) => !line.trimStart().startsWith('#'))
+            .join('\n');
+
+        expect(commands, 'the visibility step must not resolve the package from GITHUB_REPOSITORY').to.not.include(
+            'GITHUB_REPOSITORY',
+        );
     });
 
-    it('should not hardcode the repository name in a workflow', () => {
-        // IMAGE_NAME and the package path both derive from GITHUB_REPOSITORY. A
-        // literal here would survive a rename as a path that no longer exists.
-        for (const workflow of workflows) {
-            for (const job of Object.values(workflow.jobs)) {
-                for (const step of job.steps ?? []) {
-                    expect(step.run ?? '', `${workflow.name}: "${step.name}"`).to.not.include('wojtkob/open-mt2');
-                }
-            }
-        }
+    // A GHCR package is created once and then stays bound to the repository that
+    // first pushed it, so `IMAGE_NAME: ${{ github.repository }}` breaks the push
+    // the moment the repository is renamed: the workflow aims at a package this
+    // repository does not own and the push fails with
+    // `denied: permission_denied: read_package`.
+    it('should publish the image under a path the repository already owns', () => {
+        const env = (workflows.find((workflow) => workflow.jobs.release) as unknown as { env?: Record<string, string> })
+            .env;
+        const imageName = env?.IMAGE_NAME;
+
+        expect(imageName, 'the Release workflow must declare IMAGE_NAME').to.be.a('string');
+        expect(imageName, 'IMAGE_NAME must be a literal, not ${{ github.repository }}').to.not.include('${{');
+
+        // The current repository name, so a later rename fails loudly here
+        // instead of silently repointing at a package nobody can push.
+        expect(
+            imageName,
+            'IMAGE_NAME no longer matches the repository; publish once under a new path before changing it',
+        ).to.equal('wojtkob/open-mt2');
     });
 });

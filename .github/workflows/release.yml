@@ -64,7 +64,18 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # The image path is deliberately NOT `${{ github.repository }}`. The repository
+  # was renamed from `wojtkob/open-mt2` to `wojtkob/open-mt2-chamber`, but a GHCR
+  # package is created once and then stays bound to the repository that first
+  # pushed it. Deriving the name from the repository would therefore aim every
+  # build at a package this repository does not own, and the push fails with
+  # `denied: permission_denied: read_package`.
+  #
+  # `ghcr.io/wojtkob/open-mt2` is the package this repository has always pushed,
+  # it is already public, and it already carries the multi-arch manifests. Every
+  # documented `docker pull` keeps working across the rename. To move to a new
+  # image path, publish under the new name once, then change this line.
+  IMAGE_NAME: wojtkob/open-mt2
   NODE_VERSION: '22'
   # The commit to build. On `workflow_run` this is the head of the CI run; for
   # tags, schedules and manual runs it is the triggering commit.
@@ -362,15 +373,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
-          name="${GITHUB_REPOSITORY#*/}"
+          # IMAGE_NAME, not GITHUB_REPOSITORY: the image path is pinned and does
+          # not follow the repository name, so deriving the package from the
+          # repository would set the visibility of a package this workflow never
+          # pushes to.
+          name="${IMAGE_NAME##*/}"
           if gh api --method PATCH \
                -H "Accept: application/vnd.github+json" \
                "/user/packages/container/${name}" \
                -f visibility=public >/dev/null 2>&1; then
-            echo "ghcr.io/${GITHUB_REPOSITORY} is public"
+            echo "ghcr.io/${IMAGE_NAME} is public"
           else
-            echo "::warning::could not change the visibility of ghcr.io/${GITHUB_REPOSITORY};"
-            echo "::warning::an anonymous 'docker pull ghcr.io/${GITHUB_REPOSITORY}' will fail until it is"
+            echo "::warning::could not change the visibility of ghcr.io/${IMAGE_NAME};"
+            echo "::warning::an anonymous 'docker pull ghcr.io/${IMAGE_NAME}' will fail until it is"
             echo "::warning::set to Public once under the package settings."
           fi
 
