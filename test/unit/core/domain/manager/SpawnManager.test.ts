@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import SpawnManager from '@/core/domain/manager/SpawnManager';
 import Monster from '@/core/domain/entities/game/mob/Monster';
 import Stone from '@/core/domain/entities/game/mob/Stone';
+import ResourcePaths from '@/core/infra/config/ResourcePaths';
 
 const makeProto = (overrides: Record<string, unknown> = {}) => ({
     vnum: '8001',
@@ -128,16 +129,26 @@ const makeMonster = (protoOverrides: Record<string, unknown> = {}) =>
 describe('SpawnManager (issue #266)', () => {
     let tmpDir: string;
     let spawnDir: string;
+    let previousDataRoot: string | undefined;
 
     beforeEach(() => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spawn-manager-'));
-        spawnDir = path.join(tmpDir, 'src', 'core', 'infra', 'config', 'data', 'spawn', 'test_area');
+        spawnDir = path.join(tmpDir, 'core', 'infra', 'config', 'data', 'spawn', 'test_area');
         fs.mkdirSync(spawnDir, { recursive: true });
+        previousDataRoot = process.env[ResourcePaths.DATA_DIR_ENV_VAR];
+        // Redirect the data resolver at the throwaway tree so the test cannot
+        // accidentally read the spawn files that ship with the repository.
+        process.env[ResourcePaths.DATA_DIR_ENV_VAR] = tmpDir;
         sinon.stub(process, 'cwd').returns(tmpDir);
     });
 
     afterEach(() => {
         sinon.restore();
+        if (previousDataRoot === undefined) {
+            delete process.env[ResourcePaths.DATA_DIR_ENV_VAR];
+        } else {
+            process.env[ResourcePaths.DATA_DIR_ENV_VAR] = previousDataRoot;
+        }
         fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 

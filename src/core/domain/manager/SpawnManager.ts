@@ -11,8 +11,7 @@ import Logger from '@/core/infra/logger/Logger';
 import { GameConfig, GroupCollection, Groups } from '@/game/infra/config/GameConfig';
 import { SpawnConfigTypeEnum } from '@/core/enum/SpawnConfigTypeEnum';
 import { EntityManager } from './EntityManager';
-
-const DEFAULT_SPAWN_CONFIG_PATH = 'src/core/infra/config/data/spawn';
+import ResourcePaths from '@/core/infra/config/ResourcePaths';
 
 const spawnFiles = ['regen', 'npc', 'boss', 'stone'];
 
@@ -203,7 +202,14 @@ export default class SpawnManager {
     }
 
     async loadFromArea(areaName: string) {
-        const currentDir = process.cwd();
+        const spawnDirectory = ResourcePaths.spawn();
+
+        if (!spawnDirectory) {
+            this.logger.warn(
+                `[SPAWN_MANAGER] Spawn data not found; area "${areaName}" will be empty. ` +
+                    `Set ${ResourcePaths.DATA_DIR_ENV_VAR} or reinstall the data files.`,
+            );
+        }
 
         const spawns: Record<string, Array<SpawnConfig>> = {
             regen: new Array<SpawnConfig>(),
@@ -212,8 +218,12 @@ export default class SpawnManager {
             stone: new Array<SpawnConfig>(),
         };
 
+        if (!spawnDirectory) {
+            return spawns;
+        }
+
         for (const file of spawnFiles) {
-            const absoluteFilePath = path.join(currentDir, DEFAULT_SPAWN_CONFIG_PATH + `/${areaName}/${file}.json`);
+            const absoluteFilePath = path.join(spawnDirectory, areaName, `${file}.json`);
 
             try {
                 if (fsSync.existsSync(absoluteFilePath)) {

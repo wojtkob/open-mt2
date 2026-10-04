@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import * as zlib from 'node:zlib';
 import Area from '@/core/domain/Area';
 import MathUtil from '@/core/domain/util/MathUtil';
+import ResourcePaths from '@/core/infra/config/ResourcePaths';
 import { MapAttributeFlagEnum } from '@/core/enum/MapAttributeFlagEnum';
 
 const CELL_SIZE = 100;
@@ -45,6 +46,15 @@ const createEntity = (x: number, y: number) => {
     };
 };
 
+/**
+ * Points the data resolver at a throwaway tree so the test does not read the
+ * real map attributes that ship with the repository.
+ */
+const useDataRoot = (root: string) => {
+    sinon.stub(process, 'cwd').returns(root);
+    process.env[ResourcePaths.DATA_DIR_ENV_VAR] = root;
+};
+
 const buildArea = (attrDir: string, entities: any[] = [], mapName = 'test_map') => {
     const area = new Area(
         { name: mapName, positionX: 0, positionY: 0, width: 1, height: 1 },
@@ -53,22 +63,29 @@ const buildArea = (attrDir: string, entities: any[] = [], mapName = 'test_map') 
             entityManager: { addEntity: sinon.stub(), removeEntity: sinon.stub() } as any,
         },
     );
-    sinon.stub(process, 'cwd').returns(attrDir);
+    useDataRoot(attrDir);
     return area;
 };
 
 describe('Area map attributes', () => {
     let tmpDir: string;
     let attrDir: string;
+    let previousDataRoot: string | undefined;
 
     beforeEach(() => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'area-attr-'));
-        attrDir = path.join(tmpDir, 'src', 'core', 'infra', 'config', 'data', 'attr');
+        attrDir = path.join(tmpDir, 'core', 'infra', 'config', 'data', 'attr');
         fs.mkdirSync(attrDir, { recursive: true });
+        previousDataRoot = process.env[ResourcePaths.DATA_DIR_ENV_VAR];
     });
 
     afterEach(() => {
         sinon.restore();
+        if (previousDataRoot === undefined) {
+            delete process.env[ResourcePaths.DATA_DIR_ENV_VAR];
+        } else {
+            process.env[ResourcePaths.DATA_DIR_ENV_VAR] = previousDataRoot;
+        }
         fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
@@ -146,6 +163,7 @@ describe('Area map attributes', () => {
             },
         );
         sinon.stub(process, 'cwd').returns(tmpDir);
+        process.env[ResourcePaths.DATA_DIR_ENV_VAR] = tmpDir;
 
         await area.load();
 

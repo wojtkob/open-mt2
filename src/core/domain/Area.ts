@@ -14,15 +14,17 @@ import Item from './entities/game/item/Item';
 import { AtlasInfoGoto } from '@/game/infra/config/GameConfig';
 import { EntityManager } from './manager/EntityManager';
 import MapAttributeGrid from '../util/MapAttributeGrid';
-import * as path from 'node:path';
+import ResourcePaths from '@/core/infra/config/ResourcePaths';
 import { AffectBitsTypeEnum } from '../enum/AffectBitsTypeEnum';
 
 const SIZE_QUEUE = 5_000;
 export const CHAR_VIEW_SIZE = 8000;
 const SPAWN_POSITION_MULTIPLIER = 100;
-const DEFAULT_ATTR_CONFIG_PATH = 'src/core/infra/config/data/attr';
 const SPAWN_FREE_POSITION_RADIUS = 500;
 const SPAWN_FREE_POSITION_RETRIES = 16;
+
+/** Set once so a missing map-attribute tree is reported a single time, not per map. */
+let attrPathWarningLogged = false;
 
 export default class Area {
     private readonly name: string;
@@ -88,12 +90,7 @@ export default class Area {
     async load() {
         const areaName = this.name.split('/').pop() ?? this.name;
 
-        this.attributes = MapAttributeGrid.load(
-            path.join(process.cwd(), DEFAULT_ATTR_CONFIG_PATH),
-            areaName,
-            this.positionX,
-            this.positionY,
-        );
+        this.attributes = MapAttributeGrid.load(this.resolveAttrDirectory(), areaName, this.positionX, this.positionY);
 
         const entitiesToSpawn = await this.spawnManager.getEntities(areaName);
         entitiesToSpawn.forEach((entity) => {
@@ -114,6 +111,25 @@ export default class Area {
             entity.setRotation(MathUtil.calcRotationFromDirection(entity.getDirection()));
             this.spawn(entity);
         });
+    }
+
+    /**
+     * Map attribute files are optional: when the tree is missing every map
+     * simply has no blocked cells, which keeps the world bootable (useful for a
+     * slim install) but is worth warning about exactly once.
+     */
+    private resolveAttrDirectory(): string | undefined {
+        const directory = ResourcePaths.attr();
+
+        if (!directory && !attrPathWarningLogged) {
+            attrPathWarningLogged = true;
+            this.logger.warn(
+                `[AREA] Map attribute data not found; maps will load without blocked cells. ` +
+                    `Set ${ResourcePaths.DATA_DIR_ENV_VAR} or reinstall the data files.`,
+            );
+        }
+
+        return directory;
     }
 
     getAttributes() {
