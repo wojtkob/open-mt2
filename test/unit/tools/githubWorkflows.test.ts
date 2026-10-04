@@ -6,11 +6,19 @@ import * as path from 'node:path';
 // resolved from the repo rather than declared directly. The check is skipped
 // rather than made to fail if that ever changes.
 /* eslint-disable @typescript-eslint/no-require-imports -- js-yaml is CommonJS and ships no type declarations. */
+type Step = {
+    name?: string;
+    uses?: string;
+    run?: string;
+    if?: string;
+    env?: Record<string, string>;
+    'continue-on-error'?: boolean;
+};
 type Job = {
     needs?: string | string[];
     if?: string;
     outputs?: Record<string, string>;
-    steps?: Array<{ name?: string; uses?: string; run?: string; if?: string; env?: Record<string, string> }>;
+    steps?: Step[];
 };
 type Workflow = {
     name: string;
@@ -171,5 +179,75 @@ describe('github workflows', function () {
                 }
             }
         }
+    });
+
+    // A container package created by GITHUB_TOKEN defaults to private, and a
+    // private package answers 401 to an anonymous manifest request. Every doc in
+    // this repository tells users to `docker pull ghcr.io/<repo>` without a
+    // login, so if the workflow never flips the visibility that instruction
+    // fails while looking like a wrong tag name.
+    it('should make the pushed container package publicly pullable', () => {
+        // Find the job that pushes an image, then the step in it that fixes the
+        // package visibility.
+        const [, imageJob] = workflows
+            .flatMap((workflow) => Object.entries(workflow.jobs))
+            .find(([, job]) => (job.steps ?? []).some((step) => step.uses?.startsWith('docker/build-push-action@')));
+
+        expect(imageJob, 'a job that pushes a container image is required').to.not.be.undefined;
+
+        const step = imageJob?.steps?.find((candidate) => candidate.run?.includes('visibility=public'));
+
+        expect(step, 'the image job must flip the container package to public').to.not.be.undefined;
+
+        // A pull_request never pushes an image, and a fork PR cannot read this
+        // token at all; running it there would only produce noise.
+        expect(step?.if, 'the visibility step must not run on pull requests').to.be.a('string');
+        expect(step?.if).to.include('!=');
+        expect(step?.if).to.include('pull_request');
+
+        // Visibility is a registry setting, not part of the build. If the token
+        // lacks the scope, or the endpoint changes, the release must still ship
+        // its artefacts rather than go red over a package setting.
+        expect(step?.['continue-on-error'], 'the visibility step must be best-effort').to.equal(true);
+
+        // It must act on this repository's own package, derived from the
+        // repository rather than hardcoded, so a rename cannot leave it patching
+        // a path that no longer exists.
+        expect(step?.run).to.include('/user/packages/container/');
+        // It must resolve the package from IMAGE_NAME, not from the repository
+        // name: the image path is pinned, so the repository name would point the
+        // PATCH at a package this workflow never pushes to.
+        expect(step?.run).to.include('${IMAGE_NAME##*/}');
+        // The assertion targets executable lines: the explanatory comment above
+        // mentions GITHUB_REPOSITORY by name while explaining why it is unused.
+        const commands = (step?.run ?? '')
+            .split('\n')
+            .filter((line) => !line.trimStart().startsWith('#'))
+            .join('\n');
+
+        expect(commands, 'the visibility step must not resolve the package from GITHUB_REPOSITORY').to.not.include(
+            'GITHUB_REPOSITORY',
+        );
+    });
+
+    // A GHCR package is created once and then stays bound to the repository that
+    // first pushed it, so `IMAGE_NAME: ${{ github.repository }}` breaks the push
+    // the moment the repository is renamed: the workflow aims at a package this
+    // repository does not own and the push fails with
+    // `denied: permission_denied: read_package`.
+    it('should publish the image under a path the repository already owns', () => {
+        const env = (workflows.find((workflow) => workflow.jobs.release) as unknown as { env?: Record<string, string> })
+            .env;
+        const imageName = env?.IMAGE_NAME;
+
+        expect(imageName, 'the Release workflow must declare IMAGE_NAME').to.be.a('string');
+        expect(imageName, 'IMAGE_NAME must be a literal, not ${{ github.repository }}').to.not.include('${{');
+
+        // The current repository name, so a later rename fails loudly here
+        // instead of silently repointing at a package nobody can push.
+        expect(
+            imageName,
+            'IMAGE_NAME no longer matches the repository; publish once under a new path before changing it',
+        ).to.equal('wojtkob/open-mt2');
     });
 });

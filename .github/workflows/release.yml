@@ -64,7 +64,18 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # The image path is deliberately NOT `${{ github.repository }}`. The repository
+  # was renamed from `wojtkob/open-mt2` to `wojtkob/open-mt2-chamber`, but a GHCR
+  # package is created once and then stays bound to the repository that first
+  # pushed it. Deriving the name from the repository would therefore aim every
+  # build at a package this repository does not own, and the push fails with
+  # `denied: permission_denied: read_package`.
+  #
+  # `ghcr.io/wojtkob/open-mt2` is the package this repository has always pushed,
+  # it is already public, and it already carries the multi-arch manifests. Every
+  # documented `docker pull` keeps working across the rename. To move to a new
+  # image path, publish under the new name once, then change this line.
+  IMAGE_NAME: wojtkob/open-mt2
   NODE_VERSION: '22'
   # The commit to build. On `workflow_run` this is the head of the CI run; for
   # tags, schedules and manual runs it is the triggering commit.
@@ -347,6 +358,36 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Make the container package publicly pullable
+        # A container package created by GITHUB_TOKEN defaults to private, which
+        # silently breaks the anonymous `docker pull` that the README, the docs
+        # and the release notes all tell people to run: the registry answers 401
+        # for a request with no token, and the failure looks like a wrong tag
+        # rather than a visibility setting. Best effort on purpose - visibility
+        # is a registry setting, not part of the build, so it must never be the
+        # reason a release fails.
+        if: ${{ github.event_name != 'pull_request' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          # IMAGE_NAME, not GITHUB_REPOSITORY: the image path is pinned and does
+          # not follow the repository name, so deriving the package from the
+          # repository would set the visibility of a package this workflow never
+          # pushes to.
+          name="${IMAGE_NAME##*/}"
+          if gh api --method PATCH \
+               -H "Accept: application/vnd.github+json" \
+               "/user/packages/container/${name}" \
+               -f visibility=public >/dev/null 2>&1; then
+            echo "ghcr.io/${IMAGE_NAME} is public"
+          else
+            echo "::warning::could not change the visibility of ghcr.io/${IMAGE_NAME};"
+            echo "::warning::an anonymous 'docker pull ghcr.io/${IMAGE_NAME}' will fail until it is"
+            echo "::warning::set to Public once under the package settings."
+          fi
 
       - name: Build the arm64 image for a QEMU smoke test
         uses: docker/build-push-action@v6
