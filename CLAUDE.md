@@ -59,7 +59,8 @@ Use these skills when working on those flows — they describe the exact order o
 - `npm run package:verify` — `tools/package/verifyRelease.js` re-opens the artefacts as `tar`/`dpkg` would and asserts every entry point, data file, executable bit and `md5sums` entry is present. CI runs this before publishing anything.
 - `src/core/infra/config/ResourcePaths.ts` is the single source of truth for data locations (`__dirname`-relative, with `OPEN_MT2_DATA_DIR` as an override). Never reintroduce `process.cwd()` for reading `attr`, `spawn`, quest scripts or the SQL bootstrap — it breaks every install that is not run from the repository root.
 - `deploy/` holds the shell/systemd/debian packaging assets. `deploy/scripts/install.sh` is the single installer; the `.deb` `postinst` delegates to it so both paths converge.
-- `.github/workflows/release.yml` builds and tests on a native `ubuntu-24.04-arm` runner, publishes verified amd64+arm64 artefacts, and pushes a multi-arch (`amd64`/`arm64`/`arm/v7`) image to GHCR.
+- `.github/workflows/flow.yml` is the read-only gate (`format:check`, `lint`, build, tests, plus a job that builds and verifies the ARM64 artefacts). Never switch it back to `format`/`lint:fix`: those rewrite files, so CI would report success on a commit other than the one being merged.
+- `.github/workflows/release.yml` publishes automatically off a successful `workflow_run` of that gate on `master` (also on `v*` tags, a nightly `schedule` and `workflow_dispatch`). A `gate` job rejects red/forked CI runs and classifies the run as the rolling `autobuild` prerelease or an immutable semver release. It builds and tests on a native `ubuntu-24.04-arm` runner — which gates publication — and pushes a multi-arch (`amd64`/`arm64`/`arm/v7`) image to GHCR.
 
 ## Existing documentation
 
