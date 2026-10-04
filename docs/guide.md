@@ -48,3 +48,33 @@ ps: `npm run dev:auth:debug` / `npm run dev:game:debug` run the same servers wit
 login: admin
 password: admin
 ```
+
+## Production build and deployment
+
+The development workflow above runs TypeScript directly through `ts-node`. For a real
+server, compile first and run the plain JavaScript — the build output is
+self-contained and relocatable, so it works from `/opt/open-mt2`, from a renamed
+directory or from inside a container.
+
+```bash
+npm run build              # tsc + tsc-alias + copy of the map/spawn/quest data into dist/
+npm run package            # release artefacts in build/release/
+npm run package:verify     # re-open them and check every entry point
+```
+
+Then pick one of the deployment targets:
+
+| Target | Command | Guide |
+| --- | --- | --- |
+| ARM64 / Pine A64 (systemd) | `sudo ./scripts/install.sh` | [arm64.md](arm64.md) |
+| Docker (any architecture) | `docker compose -f docker-compose.yml up -d` | [arm64.md](arm64.md#2-docker-compose) |
+| ARM64 Docker (pinned to `linux/arm64`) | `docker compose -f docker-compose.arm64.yml up -d` | [arm64.md](arm64.md#2-docker-compose) |
+| Manually | `node dist/auth/main.js` and `node dist/game/main.js` | — |
+
+`dist/tools/database/migrate.js` is the production migration CLI (same script as
+`npm run migrate`, compiled); `bin/open-mt2-migrate` wraps it with the
+`/etc/open-mt2/env` configuration file.
+
+> The database image defaults to `mysql:8.0` because `mysql:5.7` publishes no
+> `linux/arm64` manifest. Override with `DB_IMAGE=mariadb:11` (also arm64v8) if you
+> prefer MariaDB, which is what Armbian ships natively.
