@@ -1,6 +1,6 @@
 {
   "name": "open-mt2",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Metin2 server emulator (authentication + game server) written in Node.js and TypeScript. Runs on amd64, ARM64 (Pine A64) and armv7.",
   "repository": {
     "type": "git",
