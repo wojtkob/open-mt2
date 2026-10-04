@@ -460,8 +460,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.gate.outputs.release_tag }}
-          # Point the rolling tag at the exact commit that was built, so the
-          # autobuild tag never drifts ahead of its own artefacts.
+          # Only honoured while the tag is being created. Once the rolling
+          # `autobuild` tag exists, keeping it on the built commit is the job of
+          # "Move the rolling autobuild tag onto the built commit" below.
           target_commitish: ${{ env.RELEASE_SHA }}
           name: Open MT2 ${{ needs.gate.outputs.version }} (${{ needs.gate.outputs.release_tag }})
           prerelease: ${{ needs.gate.outputs.prerelease }}
@@ -544,6 +545,45 @@ jobs:
                 gh api --method DELETE "repos/${{ github.repository }}/releases/assets/$id"
               fi
             done
+
+      # `target_commitish` on the release above is only honoured while the tag is
+      # being *created*. Once `autobuild` exists it is never moved again, so the
+      # tag stays pinned to the commit it was first published from while the
+      # assets are rewritten on every green build. The two then disagree, and the
+      # disagreement is user visible: the "Source code (zip/tar.gz)" links and the
+      # install-guide link in the release body both resolve through the tag, so
+      # they hand out an older build than the one being downloaded.
+      #
+      # Force the rolling tag onto the commit that was actually built, then assert
+      # it took. Scoped to `autobuild` by name, so an immutable `v*` release can
+      # never be rewritten by this step.
+      - name: Move the rolling autobuild tag onto the built commit
+        if: needs.gate.outputs.release_tag == 'autobuild'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.gate.outputs.release_tag }}
+          SHA: ${{ env.RELEASE_SHA }}
+        run: |
+          set -eu
+          if gh api --method PATCH \
+            "repos/${{ github.repository }}/git/refs/tags/$TAG" \
+            -f sha="$SHA" -F force=true; then
+            echo "Moved tag $TAG onto ${SHA:0:7}"
+          else
+            # The publish step creates the tag, so this only fires if that step
+            # changes, or if the tag was deleted mid-run.
+            gh api --method POST "repos/${{ github.repository }}/git/refs" \
+              -f ref="refs/tags/$TAG" -f sha="$SHA"
+            echo "Created tag $TAG at ${SHA:0:7}"
+          fi
+
+          actual="$(gh api "repos/${{ github.repository }}/git/refs/tags/$TAG" \
+            --jq '.object.sha')"
+          if [ "$actual" != "$SHA" ]; then
+            echo "::error::Tag $TAG resolves to $actual but this build is $SHA."
+            exit 1
+          fi
+          echo "Tag $TAG now matches the published artefacts (${SHA:0:7})."
 
       - name: Release summary
         env:

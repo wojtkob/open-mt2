@@ -10,7 +10,7 @@ type Job = {
     needs?: string | string[];
     if?: string;
     outputs?: Record<string, string>;
-    steps?: Array<{ name?: string; uses?: string; run?: string; if?: string }>;
+    steps?: Array<{ name?: string; uses?: string; run?: string; if?: string; env?: Record<string, string> }>;
 };
 type Workflow = {
     name: string;
@@ -121,6 +121,55 @@ describe('github workflows', function () {
 
             expect(checkout, `${workflow.name} / arm64 must check out code`).to.not.be.undefined;
             expect(checkout?.with?.ref, `${workflow.name} / arm64 must pin the checkout to a ref`).to.not.be.undefined;
+        }
+    });
+
+    // `target_commitish` on a release only applies while the tag is created. The
+    // rolling `autobuild` tag therefore stayed pinned to the commit it was first
+    // published from, while its assets were rewritten on every green build, so
+    // the "Source code" and install-guide links on the release resolved to an
+    // older build than the artefacts next to them.
+    it('should move the rolling autobuild tag onto the commit it published', () => {
+        const release = workflows.find((workflow) => workflow.jobs.release);
+
+        expect(release, 'a Release workflow with a release job is required').to.not.be.undefined;
+
+        const steps = release?.jobs.release?.steps ?? [];
+        const moveTag = steps.find((step) => step.run?.includes('git/refs/tags/$TAG'));
+
+        expect(moveTag, 'the release job must keep the rolling tag on the built commit').to.not.be.undefined;
+        // Force-updating the ref is the whole point: an existing tag is never
+        // moved by a plain PATCH without it.
+        expect(moveTag?.run, 'the tag ref must be updated with force=true').to.include('force=true');
+        expect(moveTag?.env?.SHA, 'the tag must be moved onto RELEASE_SHA').to.include('RELEASE_SHA');
+        // The ref must be resolved back afterwards, otherwise a silent failure to
+        // move would still publish a green run with a drifting tag.
+        expect(moveTag?.run, 'the tag move must be verified').to.match(/actual="\$\(gh api/);
+        expect(moveTag?.run, 'a tag that did not move must fail the run').to.include('exit 1');
+    });
+
+    it('should never force-move an immutable semver tag', () => {
+        for (const workflow of workflows) {
+            for (const [name, job] of Object.entries(workflow.jobs)) {
+                for (const step of job.steps ?? []) {
+                    if (!step.run?.includes('git/refs') || !step.run?.includes('force=true')) {
+                        continue;
+                    }
+
+                    // Only the rolling autobuild tag may be rewritten, and only
+                    // while the gate classified the run as an autobuild. Without
+                    // that guard the step would also fire for a `v*` release,
+                    // whose tag is immutable by design.
+                    expect(
+                        step.if,
+                        `${workflow.name} / ${name}: "${step.name}" force-updates a tag ref but is not guarded by \`if\``,
+                    ).to.be.a('string');
+                    expect(
+                        step.if,
+                        `${workflow.name} / ${name}: "${step.name}" force-updates a tag ref; its guard must restrict it to the rolling autobuild tag`,
+                    ).to.include('autobuild');
+                }
+            }
         }
     });
 });
