@@ -4,12 +4,32 @@ import tseslint from "typescript-eslint";
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
-  { ignores: ["dist"] },
+  // `dist/` is the compiled output and `build/` holds the release staging tree
+  // (which embeds its own `dist/` and `node_modules/`); neither is source.
+  { ignores: ["dist", "build"] },
   { files: ["**/*.{js,mjs,cjs,ts}"] },
   { files: ["**/*.js"], languageOptions: { sourceType: "commonjs" } },
   { languageOptions: { globals: globals.browser } },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
+  // Build/packaging tooling under `tools/` is plain CommonJS Node scripts: it
+  // runs outside the TypeScript program (the release build only needs `node`),
+  // so it legitimately uses `require`, `module`, `__dirname` and `Buffer`, and
+  // `require()` instead of ESM imports.
+  {
+    files: ["tools/**/*.js"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: { ...globals.node },
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+      // Several long-standing scripts in `tools/` re-declare Node built-ins
+      // (`const process = require("process")`) to keep them readable; the
+      // re-declaration is harmless.
+      "no-redeclare": "off",
+    },
+  },
   {
     files: ["src/**/*.ts"],
     languageOptions: {

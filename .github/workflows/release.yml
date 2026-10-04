@@ -1,0 +1,353 @@
+name: Release
+
+# Automated build + publish pipeline.
+#
+# * every push/PR: lint, format check, unit tests, a full build, and a verified
+#   release package for the host architecture;
+# * native `linux/arm64` runner (ubuntu-24.04-arm): the same build, tests and
+#   package verification executed on real aarch64 hardware, plus a relocatability
+#   smoke test of the produced tarball;
+# * docker buildx + QEMU: a multi-arch image (amd64 / arm64 / arm-v7) pushed to
+#   GHCR, with the arm64 variant booted under QEMU to prove it starts;
+# * tag `v*`: publish the tarball, the .deb and the checksums as a GitHub
+#   release, and attach the signed-by-digest image reference.
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to package (defaults to package.json)'
+        required: false
+        type: string
+      publish:
+        description: 'Publish the container image to GHCR'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  NODE_VERSION: '22'
+
+jobs:
+  # ------------------------------------------------------------------ quality
+  quality:
+    name: Lint, format, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Check Prettier formatting
+        run: npm run format:check
+
+      - name: Run Lint
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+  # -------------------------------------------------------------- build/package
+  build:
+    name: Build and package (amd64)
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Resolve version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: npm run build
+
+      - name: Package release artefacts
+        run: node tools/package/buildRelease.js --arch amd64 --version "${{ steps.version.outputs.version }}"
+
+      - name: Verify release artefacts
+        run: node tools/package/verifyRelease.js --arch amd64 --version "${{ steps.version.outputs.version }}"
+
+      - name: Upload release artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-mt2-amd64
+          path: |
+            build/release/*.tar.gz
+            build/release/*.deb
+            build/release/SHA256SUMS
+          if-no-files-found: error
+
+  # ------------------------------------------------------- native ARM64 build
+  arm64:
+    name: Build, test and package (native ARM64)
+    needs: quality
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Report runner architecture
+        run: |
+          echo "machine: $(uname -m)"
+          echo "node   : $(node --version 2>/dev/null || echo 'not installed yet')"
+          test "$(uname -m)" = "aarch64"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Resolve version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: npm run build
+
+      - name: Run unit tests on ARM64
+        run: npm run test:unit
+
+      - name: Package release artefacts
+        run: node tools/package/buildRelease.js --arch arm64 --version "${{ steps.version.outputs.version }}"
+
+      - name: Verify release artefacts
+        run: node tools/package/verifyRelease.js --arch arm64 --version "${{ steps.version.outputs.version }}"
+
+      - name: Smoke test the packaged tree from an unrelated working directory
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -eu
+          work_dir="$(mktemp -d)"
+          tar -xzf "build/release/open-mt2-${VERSION}-linux-arm64.tar.gz" -C "$work_dir"
+          # Rename the prefix and run from an unrelated cwd: ResourcePaths must
+          # follow __dirname, never process.cwd(), or every install outside the
+          # repository would break.
+          mv "$work_dir/open-mt2-${VERSION}" "$work_dir/relocated-server"
+          cd "$work_dir"
+          node -e "
+            const paths = require('$work_dir/relocated-server/dist/core/infra/config/ResourcePaths.js').default;
+            const fs = require('node:fs');
+            for (const tree of ['attr', 'spawn', 'databaseScripts', 'quests']) {
+              const dir = paths.requireResourceDir(tree);
+              if (!fs.statSync(dir).isDirectory()) throw new Error('not a directory: ' + dir);
+              console.log(tree.padEnd(16), dir);
+            }
+            if (!fs.existsSync(paths.requireResourceFile('databaseScripts', 'script.sql'))) {
+              throw new Error('script.sql missing');
+            }
+            console.log('projectRoot   ', paths.projectRoot());
+          "
+
+      - name: Upload release artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-mt2-arm64
+          path: |
+            build/release/*.tar.gz
+            build/release/*.deb
+            build/release/SHA256SUMS
+          if-no-files-found: error
+
+  # ------------------------------------------------------------ container image
+  docker:
+    name: Multi-arch container image
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64,arm/v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build the arm64 image for a QEMU smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          tags: open-mt2:arm64-smoke
+          cache-from: type=gha,scope=arm64-smoke
+
+      - name: Smoke test the arm64 image under QEMU
+        run: |
+          set -eu
+          image=open-mt2:arm64-smoke
+
+          echo "--- runtime"
+          docker run --rm --platform linux/arm64 "$image" \
+            node -e "console.log('arch', process.arch, '| node', process.version)"
+
+          # Booting the servers without a database exits on the connection
+          # attempt, which is fine: what must never happen is a module
+          # resolution error, because that would mean the image depends on
+          # ts-node/tsconfig-paths or on a devDependency that was pruned.
+          for entry in dist/auth/main.js dist/game/main.js dist/tools/database/migrate.js; do
+            echo "--- $entry"
+            set +e
+            output="$(docker run --rm --platform linux/arm64 \
+              -e AUTH_SERVER_PORT=11002 -e GAME_SERVER_PORT=13001 \
+              -e DB_HOST=127.0.0.1 -e DB_PORT=3306 -e DB_USER=root \
+              -e DB_ROOT_PASSWORD=root -e AUTH_DB_DATABASE_NAME=auth \
+              -e GAME_DB_DATABASE_NAME=game -e CACHE_HOST=127.0.0.1 \
+              -e CACHE_PORT=6379 "$image" node "$entry" 2>&1)"
+            set -e
+            echo "$output" | tail -n 4
+            if echo "$output" | grep -qE "Cannot find module|ERR_MODULE_NOT_FOUND"; then
+              echo "::error::$entry could not resolve its modules on arm64"
+              exit 1
+            fi
+          done
+
+          # ResourcePaths must resolve the data trees inside the image too.
+          docker run --rm --platform linux/arm64 "$image" node -e "
+            const paths = require('/opt/open-mt2/dist/core/infra/config/ResourcePaths.js').default;
+            console.log(paths.requireAttr());
+            console.log(paths.requireSpawn());
+            console.log(paths.requireDatabaseScripts());
+            console.log(paths.requireQuests());
+          "
+
+      - name: Summary
+        run: |
+          {
+            echo "### Container image"
+            echo ""
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------------- gitHub release
+  release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download amd64 artefacts
+        uses: actions/download-artifact@v4
+        with:
+          name: open-mt2-amd64
+          path: build/release
+
+      - name: Download ARM64 artefacts
+        uses: actions/download-artifact@v4
+        with:
+          name: open-mt2-arm64
+          path: build/release
+
+      - name: Combine checksums
+        run: |
+          cd build/release
+          # Both artefacts jobs write a SHA256SUMS; merge them into one file that
+          # covers every published artefact.
+          cat SHA256SUMS | sort -u -k 2 > SHA256SUMS.merged
+          mv SHA256SUMS.merged SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Open MT2 ${{ github.ref_name }}
+          body: |
+            Open MT2 release `${{ github.ref_name }}`.
+
+            The server is architecture independent (pure JavaScript), so the same
+            code runs on `amd64`, `arm64` (Pine A64, Raspberry Pi 4/5, Ampere,
+            Graviton) and `armv7l`. Download the ARM64 package and run
+            `sudo ./scripts/install.sh`.
+
+            Container image: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}`
+            (`linux/amd64`, `linux/arm64`, `linux/arm/v7`).
+
+            Install guide: `docs/arm64.md` in the tag.
+          files: |
+            build/release/*.tar.gz
+            build/release/*.deb
+            build/release/SHA256SUMS
+          fail_on_unmatched_files: true

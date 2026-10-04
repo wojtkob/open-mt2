@@ -88,7 +88,16 @@ export default class MapAttributeGrid {
         });
     }
 
-    static load(directory: string, mapName: string, baseX: number, baseY: number): MapAttributeGrid {
+    /**
+     * @param directory Folder holding `<mapName>.attr.gz`. `undefined` (or a
+     * folder without that file) yields an empty grid, i.e. a map with no
+     * blocked cells — the behaviour used when the map data is not installed.
+     */
+    static load(directory: string | undefined, mapName: string, baseX: number, baseY: number): MapAttributeGrid {
+        if (!directory) {
+            return MapAttributeGrid.empty(baseX, baseY);
+        }
+
         const filePath = `${directory}/${mapName}.attr.gz`;
 
         if (!fsSync.existsSync(filePath)) {

@@ -1,10 +1,22 @@
+# Build artefacts are produced *inside* the image (see Dockerfile), so nothing
+# generated locally may leak into the context.
 node_modules
-npm-debug.log
 dist
+build
 coverage
+.nyc_output
+.eslintcache
+logs
+npm-debug.log
 .tmp
 .vscode
 .git
+.github
 .gitignore
+.gitattributes
+.husky
+test
 .env
 docker-compose.yml
+docker-compose.dep.yml
+docker-compose.arm64.yml

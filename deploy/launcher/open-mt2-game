@@ -1,0 +1,9 @@
+#!/bin/sh
+# Starts the Open MT2 game server.
+set -eu
+
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=deploy/launcher/common.sh
+. "$SCRIPT_DIR/common.sh"
+
+open_mt2_run "$OPEN_MT2_HOME/dist/game/main.js" "$@"

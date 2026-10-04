@@ -5,6 +5,7 @@
 ![GitHub forks](https://img.shields.io/github/forks/willianmarquess/open-mt2?style=for-the-badge)
 
 ![CI Pipeline](https://github.com/willianmarquess/open-mt2/actions/workflows/flow.yml/badge.svg)
+![Release](https://github.com/willianmarquess/open-mt2/actions/workflows/release.yml/badge.svg)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=willianmarquess_open-mt2&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=willianmarquess_open-mt2)
 
 [![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-light.svg)](https://sonarcloud.io/summary/new_code?id=willianmarquess_open-mt2)
@@ -75,6 +76,27 @@ Metin2 are copyrighted by [Webzen](http://webzen.com/ "Webzen").
 ## Getting Started
 
 - Follow this [**guide**](docs/guide.md)
+
+## Deployment
+
+Open MT2 is pure JavaScript with **no native dependencies**, so the same build runs on
+`linux/amd64`, `linux/arm64` (Pine A64, Raspberry Pi 4/5, Ampere, Graviton) and
+`linux/arm/v7`.
+
+```bash
+npm run package                 # tarball + .deb + SHA256SUMS in build/release/
+npm run package:verify:arm64    # re-open the artefacts and check every entry point
+```
+
+```bash
+# ARM64 board (Armbian / Debian)
+tar -xzf open-mt2-<version>-linux-arm64.tar.gz && cd open-mt2-<version>
+sudo ./scripts/install.sh                      # installs two systemd services in /opt/open-mt2
+sudo OPEN_MT2_RUN_MIGRATE=1 ./scripts/install.sh   # also bootstrap the databases
+```
+
+- Full ARM64 install guide: [**docs/arm64.md**](docs/arm64.md) (release package, Docker Compose, from source, troubleshooting)
+- Docker: `docker compose -f docker-compose.arm64.yml up -d` (pins `linux/arm64`)
 
 ## Packets
 

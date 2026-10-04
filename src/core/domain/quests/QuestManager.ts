@@ -15,6 +15,7 @@ import Monster from '../entities/game/mob/Monster';
 import ShopManager from '@/core/domain/shop/ShopManager';
 import ItemManager from '../manager/ItemManager';
 import { PlayerQuest } from './facade/PlayerQuest';
+import ResourcePaths from '@/core/infra/config/ResourcePaths';
 
 type ChatOption = {
     questId: number;
@@ -54,13 +55,17 @@ export class QuestManager {
     }
 
     load() {
-        const baseDir = path.join(process.cwd(), 'src', 'core', 'domain', 'quests', 'quests');
+        const baseDir = ResourcePaths.findOptionalResourceDir('quests');
 
-        if (!fs.existsSync(baseDir)) {
-            this.logger.error(`[QUEST_MANAGER]: directory not found: ${baseDir}`);
+        if (!baseDir) {
+            this.logger.error(
+                `[QUEST_MANAGER]: quests directory not found. Set ${ResourcePaths.DATA_DIR_ENV_VAR} or reinstall the data files.`,
+            );
             return;
         }
 
+        // `.ts` when running through ts-node (dev), `.js` from the compiled tree.
+        // `X.js.map` does not end with `.js`, so source maps are skipped.
         const files = fs.readdirSync(baseDir).filter((f) => f.endsWith('.ts') || f.endsWith('.js'));
 
         for (const file of files) {

@@ -1,7 +1,14 @@
-version: "3.8"
+# Dependencies only (MySQL + Redis) for `npm run test:integration` / `npm run test:performance`.
+#
+# The image tags are parameterised so ARM64 machines can point at builds that
+# publish a linux/arm64v8 manifest: `mysql:5.7` (the historical default) has no
+# arm64 build at all, while `mysql:8.0`, `mariadb:11` and `redis:*-alpine` do.
+#
+#   DB_IMAGE=mysql:8.0 npm run docker:dep
+#
 services:
   cache:
-    image: redis:latest
+    image: "${CACHE_IMAGE:-redis:7-alpine}"
     restart: unless-stopped
     container_name: cache
     env_file:
@@ -10,7 +17,7 @@ services:
       - $CACHE_PORT:$CACHE_PORT
 
   database:
-    image: mysql:5.7
+    image: "${DB_IMAGE:-mysql:8.0}"
     container_name: database
     restart: always
     env_file:

@@ -10,6 +10,7 @@ describe('WinstonLoggerAdapter', () => {
     beforeEach(() => {
         loggerStub = {
             info: sinon.stub(),
+            warn: sinon.stub(),
             error: sinon.stub(),
             debug: sinon.stub(),
         };
@@ -31,6 +32,16 @@ describe('WinstonLoggerAdapter', () => {
 
         expect(loggerStub.info.calledOnce).to.be.true;
         expect(loggerStub.info.calledWith(message, [params])).to.have.true;
+    });
+
+    it('should log warn messages', () => {
+        const message = 'Warn message';
+        const params = { key: 'value' };
+
+        winstonLoggerAdapter.warn(message, params);
+
+        expect(loggerStub.warn.calledOnce).to.be.true;
+        expect(loggerStub.warn.calledWith(message, [params])).to.be.true;
     });
 
     it('should log error messages with string', () => {

@@ -31,6 +31,9 @@ export default class WinstonLoggerAdapter implements Logger {
     info(message: string, ...params: any): void {
         this.logger.info(message, params);
     }
+    warn(message: string, ...params: any): void {
+        this.logger.warn(message, params);
+    }
     error(param: Error | string, ...params: any): void {
         if (param instanceof Error) {
             this.logger.error(param);

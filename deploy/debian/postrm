@@ -1,0 +1,17 @@
+#!/bin/sh
+#
+# Debian maintainer script — runs after the package files have been removed.
+#
+# $1 = "remove" (files gone, config kept) | "purge" (config gone too) | "upgrade"
+#
+set -e
+
+if [ ! -d /run/systemd/system ] || ! command -v systemctl >/dev/null 2>&1; then
+    exit 0
+fi
+
+rm -f /etc/systemd/system/open-mt2-auth.service /etc/systemd/system/open-mt2-game.service
+systemctl daemon-reload >/dev/null 2>&1 || true
+systemctl reset-failed 'open-mt2-*' >/dev/null 2>&1 || true
+
+exit 0
