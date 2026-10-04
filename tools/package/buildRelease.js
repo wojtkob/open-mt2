@@ -34,6 +34,29 @@ const pkg = require(path.join(projectRoot, 'package.json'));
 
 const DEFAULT_PREFIX = '/opt/open-mt2';
 
+/**
+ * Project home, taken from `package.json#repository` when it declares one so the
+ * metadata baked into the .deb never drifts from the repo it was built from.
+ */
+const PROJECT_URL = resolveProjectUrl(pkg);
+
+/**
+ * `package.json#repository` may be a plain URL string or the `{ type, url }`
+ * object npm documents; both are accepted, and `git+https://` prefixes are
+ * stripped so the value is usable as a `Homepage:` field.
+ */
+function resolveProjectUrl(packageJson) {
+    const fallback = 'https://github.com/wojtkob/open-mt2';
+    const declared =
+        typeof packageJson.repository === 'string' ? packageJson.repository : packageJson.repository?.url;
+
+    if (typeof declared !== 'string' || !declared.startsWith('http')) {
+        return fallback;
+    }
+
+    return declared.replace(/^(?:git\+)?/, '').replace(/\.git$/, '');
+}
+
 // --------------------------------------------------------------------- options
 
 function parseArgs(argv) {
@@ -313,7 +336,7 @@ function createDebianPackage({ stagingDir, version, arch, mtime, maintainer, des
         InstalledSize: Math.max(1, Math.round(installedSize / 1024)),
         Depends: 'libc6, adduser',
         Suggests: 'mariadb-server | mysql-server, redis-server',
-        Homepage: 'https://github.com/willianmarquess/open-mt2',
+        Homepage: PROJECT_URL,
         Description: description,
     });
 

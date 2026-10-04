@@ -1,15 +1,13 @@
 # Open Metin2 - Server Emulator
 
-![GitHub repo size](https://img.shields.io/github/repo-size/willianmarquess/open-mt2?style=for-the-badge)
-![GitHub language count](https://img.shields.io/github/languages/count/willianmarquess/open-mt2?style=for-the-badge)
-![GitHub forks](https://img.shields.io/github/forks/willianmarquess/open-mt2?style=for-the-badge)
+[![GitHub repo size](https://img.shields.io/github/repo-size/wojtkob/open-mt2?style=for-the-badge)](https://github.com/wojtkob/open-mt2)
+[![GitHub language count](https://img.shields.io/github/languages/count/wojtkob/open-mt2?style=for-the-badge)](https://github.com/wojtkob/open-mt2)
+[![GitHub release](https://img.shields.io/github/v/release/wojtkob/open-mt2?style=for-the-badge)](https://github.com/wojtkob/open-mt2/releases)
 
-![CI Pipeline](https://github.com/willianmarquess/open-mt2/actions/workflows/flow.yml/badge.svg)
-![Release](https://github.com/willianmarquess/open-mt2/actions/workflows/release.yml/badge.svg)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=willianmarquess_open-mt2&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=willianmarquess_open-mt2)
-
-[![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-light.svg)](https://sonarcloud.io/summary/new_code?id=willianmarquess_open-mt2)
-[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=willianmarquess_open-mt2)](https://sonarcloud.io/summary/new_code?id=willianmarquess_open-mt2)
+[![CI Pipeline](https://github.com/wojtkob/open-mt2/actions/workflows/flow.yml/badge.svg)](https://github.com/wojtkob/open-mt2/actions/workflows/flow.yml)
+[![ARM64 Release](https://github.com/wojtkob/open-mt2/actions/workflows/release.yml/badge.svg)](https://github.com/wojtkob/open-mt2/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/release/wojtkob/open-mt2.svg)](https://github.com/wojtkob/open-mt2/releases/latest)
+[![GHCR image](https://img.shields.io/badge/ghcr.io%2Fwojtkob%2Fopen--mt2-blue)](https://github.com/wojtkob/open-mt2/pkgs/container/open-mt2)
 
 
 Metin2 JS is an open source implementation of MMORPG Metin2 server using Nodejs with Typescript language.
@@ -174,11 +172,11 @@ In this implementation we are using custom commands, described bellow:
 
 ## Auth Flow
 The image bellow show how the client interacts with auth server.
-![](https://github.com/willianmarquess/open-mt2/blob/master/docs/images/mt2-auth-server.drawio.png)
+![](https://github.com/wojtkob/open-mt2/blob/master/docs/images/mt2-auth-server.drawio.png)
 
 ## Game Flow (work in progress)
 The image bellow show how the client interacts with game server.
-![](https://github.com/willianmarquess/open-mt2/blob/master/docs/images/mt2-game-server.drawio.png)
+![](https://github.com/wojtkob/open-mt2/blob/master/docs/images/mt2-game-server.drawio.png)
 
 ## License
 

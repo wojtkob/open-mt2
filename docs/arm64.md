@@ -229,7 +229,7 @@ Relevant knobs:
 ```bash
 DB_IMAGE=mariadb:11 docker compose -f docker-compose.arm64.yml up -d
 CACHE_IMAGE=redis:7-alpine docker compose -f docker-compose.arm64.yml up -d
-OPEN_MT2_IMAGE=ghcr.io/willianmarquess/open-mt2:1.0.0 \
+OPEN_MT2_IMAGE=ghcr.io/wojtkob/open-mt2:1.0.0 \
   OPEN_MT2_PULL_POLICY=always \
   docker compose -f docker-compose.arm64.yml up -d
 ```
@@ -247,7 +247,7 @@ few minutes on a Pine A64 — a cross-build elsewhere is much faster.
 
 ```bash
 sudo apt-get install -y git build-essential python3
-git clone https://github.com/willianmarquess/open-mt2.git
+git clone https://github.com/wojtkob/open-mt2.git
 cd open-mt2
 npm ci --ignore-scripts
 cp .env.example .env && $EDITOR .env

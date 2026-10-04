@@ -1,7 +1,24 @@
 {
   "name": "open-mt2",
   "version": "1.0.0",
-  "description": "",
+  "description": "Metin2 server emulator (authentication + game server) written in Node.js and TypeScript. Runs on amd64, ARM64 (Pine A64) and armv7.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wojtkob/open-mt2.git"
+  },
+  "homepage": "https://github.com/wojtkob/open-mt2",
+  "bugs": {
+    "url": "https://github.com/wojtkob/open-mt2/issues"
+  },
+  "keywords": [
+    "metin2",
+    "emulator",
+    "mmo",
+    "server",
+    "arm64",
+    "pine-a64",
+    "typescript"
+  ],
   "main": "dist/game/main.js",
   "scripts": {
     "dev:auth": "cross-env LOG_LEVEL=info tsnd -r tsconfig-paths/register --transpile-only --respawn --ignore-watch node_modules --watch src/auth --env-file=.env src/auth/main.ts",
