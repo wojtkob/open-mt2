@@ -228,6 +228,26 @@ describe('github workflows', function () {
         expect(commands, 'the visibility step must not resolve the package from GITHUB_REPOSITORY').to.not.include(
             'GITHUB_REPOSITORY',
         );
+
+        // GITHUB_TOKEN cannot reliably change a package's visibility. It could
+        // warn unconditionally, which told the reader to go and fix a setting
+        // that was already correct - on the run that introduced this step the
+        // package was already public and the warning was plainly false. The
+        // step has to read the current visibility and stay quiet when there is
+        // nothing to fix, and only claim a manual fix when it can see that the
+        // package really is private.
+        expect(commands, 'the step must read the current visibility').to.include("--jq '.visibility'");
+        expect(commands, 'an already-public package must be reported and skipped').to.include('is already public');
+
+        const readAt = commands.indexOf("--jq '.visibility'");
+        const patchAt = commands.indexOf('--method PATCH');
+
+        expect(readAt, 'the step must read the visibility before it patches it').to.be.greaterThan(-1);
+        expect(patchAt, 'the step must still attempt the patch').to.be.greaterThan(-1);
+        expect(readAt, 'the visibility must be read before it is patched').to.be.lessThan(patchAt);
+        expect(commands, 'a private package must be the case that asks for a manual fix').to.include(
+            '$visibility" = private',
+        );
     });
 
     // A GHCR package is created once and then stays bound to the repository that

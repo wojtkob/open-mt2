@@ -378,15 +378,39 @@ jobs:
           # repository would set the visibility of a package this workflow never
           # pushes to.
           name="${IMAGE_NAME##*/}"
+          package="/user/packages/container/${name}"
+
+          # Read the current visibility first. GITHUB_TOKEN cannot always change
+          # a package's visibility, and it used to warn unconditionally about a
+          # manual fix even when the package was already public - so a run with
+          # nothing to do still told the reader to go and change a setting that
+          # was already correct. Only report a problem that actually exists.
+          visibility="$(gh api --jq '.visibility' "$package" 2>/dev/null || true)"
+
+          case "$visibility" in
+            public)
+              echo "ghcr.io/${IMAGE_NAME} is already public"
+              exit 0
+              ;;
+            '' | null)
+              # The token cannot read the package, so its visibility is unknown.
+              # Try to make it public anyway; a later anonymous pull is the only
+              # thing that can actually confirm the outcome.
+              ;;
+          esac
+
           if gh api --method PATCH \
                -H "Accept: application/vnd.github+json" \
-               "/user/packages/container/${name}" \
+               "$package" \
                -f visibility=public >/dev/null 2>&1; then
             echo "ghcr.io/${IMAGE_NAME} is public"
-          else
-            echo "::warning::could not change the visibility of ghcr.io/${IMAGE_NAME};"
+          elif [ "$visibility" = private ]; then
+            echo "::warning::ghcr.io/${IMAGE_NAME} is still private and this token cannot change it;"
             echo "::warning::an anonymous 'docker pull ghcr.io/${IMAGE_NAME}' will fail until it is"
             echo "::warning::set to Public once under the package settings."
+          else
+            echo "::warning::could not confirm or change the visibility of ghcr.io/${IMAGE_NAME};"
+            echo "::warning::verify that an anonymous 'docker pull ghcr.io/${IMAGE_NAME}:latest' works."
           fi
 
       - name: Build the arm64 image for a QEMU smoke test
