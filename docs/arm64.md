@@ -123,7 +123,7 @@ Useful overrides:
 # Install somewhere else, with a different service account and starting now.
 sudo PREFIX=/srv/open-mt2 OPEN_MT2_USER=mt2 OPEN_MT2_AUTOSTART=1 ./scripts/install.sh
 
-# Never download a private Node runtime (fail instead if Node < 20).
+# Never download a private Node runtime (fail instead if Node < 22).
 sudo OPEN_MT2_SKIP_NODE_DOWNLOAD=1 ./scripts/install.sh
 ```
 
@@ -185,7 +185,7 @@ Without systemd, run the launchers directly:
 
 The launchers pick the Node runtime in this order: `$OPEN_MT2_NODE`,
 `$OPEN_MT2_HOME/runtime/bin/node`, then `node` from `PATH`, and they refuse to
-start on Node < 20.
+start on Node < 22.
 
 ### 1.8 Upgrade / uninstall
 
@@ -232,7 +232,7 @@ Relevant knobs:
 ```bash
 DB_IMAGE=mariadb:11 docker compose -f docker-compose.arm64.yml up -d
 CACHE_IMAGE=redis:7-alpine docker compose -f docker-compose.arm64.yml up -d
-OPEN_MT2_IMAGE=ghcr.io/wojtkob/open-mt2:1.1.0 \
+OPEN_MT2_IMAGE=ghcr.io/wojtkob/open-mt2:latest \
   OPEN_MT2_PULL_POLICY=always \
   docker compose -f docker-compose.arm64.yml up -d
 ```
@@ -258,7 +258,7 @@ few minutes on a Pine A64 — a cross-build elsewhere is much faster.
 ```bash
 sudo apt-get install -y git build-essential python3
 git clone https://github.com/wojtkob/open-mt2-chamber.git
-cd open-mt2
+cd open-mt2-chamber
 npm ci --ignore-scripts
 cp .env.example .env && $EDITOR .env
 npm run build
@@ -284,10 +284,16 @@ A stale `dist/` produced without `tsc-alias`. Run `npm run build:clean` and
 rebuild; never start the compiled server with `-r tsconfig-paths/register`
 (that package is a devDependency and is not shipped).
 
-**`open-mt2 cannot start on this Node.js runtime: Node.js v20.x is too old...`**
+**`open-mt2 cannot start on this Node.js runtime: Node.js v20.11.1 is too old, Node.js >= 22 is required`**
 The quests need `Promise.withResolvers`, which is Node.js 22+. Install Node 22+
 system-wide, or run `sudo /opt/open-mt2/scripts/install-node.sh` to place a
 private 22.x runtime under `/opt/open-mt2/runtime`.
+
+This message comes from the servers themselves, so it appears when something
+launched Node directly (`node dist/auth/main.js`, `npm run auth`). The launchers
+in `/opt/open-mt2/bin` do the same check in shell first and say
+`open-mt2: Node.js 22+ is required, found v20.11.1 at ...` instead, so a plain
+`systemctl start open-mt2-auth` reports it without ever entering Node.
 
 **`mysql: no matching manifest for linux/arm64`**
 A leftover `mysql:5.7` reference. Use `mysql:8.0`, `mysql:8.4`, `mariadb:11` or

@@ -9,6 +9,23 @@ import {
     unsupportedRuntimeReasons,
 } from '@/core/util/nodeVersion';
 
+/**
+ * Reads `NAME=123` out of a shell script so the four declarations of the Node
+ * floor can be compared. Commented-out assignments are deliberately skipped: a
+ * `# MIN_NODE_MAJOR=20` left behind after a change is exactly the drift this
+ * exists to catch, and it must not be allowed to read as the real value.
+ */
+function readShellNumber(file: string, name: string): number {
+    const text = fs.readFileSync(file, 'utf8');
+    const match = text.match(new RegExp(`^[ \\t]*${name}=(\\d+)[ \\t]*$`, 'm'));
+
+    if (!match || match[1] === undefined) {
+        throw new Error(`${name}= is not assigned as a bare number in ${path.relative(process.cwd(), file)}`);
+    }
+
+    return Number.parseInt(match[1], 10);
+}
+
 describe('nodeVersion', () => {
     describe('MIN_NODE_MAJOR', () => {
         // Promise.withResolvers is the constraint that sets this, and it is not
@@ -29,6 +46,28 @@ describe('nodeVersion', () => {
 
             expect(declared.engines?.node, 'package.json must declare engines.node').to.be.a('string');
             expect(declared.engines.node).to.equal(`>=${MIN_NODE_MAJOR}`);
+        });
+
+        it('should be the same floor the installers and launchers enforce', () => {
+            // Four separate declarations of one number, and they run at
+            // different times: package.json before install, install.sh while
+            // choosing a system runtime, common.sh every launch, nodeVersion.ts
+            // inside Node. Nothing links them, so drift is silent until someone
+            // hits it on a board. install.sh will replace a system Node 20 with
+            // a private 22.x runtime; common.sh is what stops OPEN_MT2_NODE (or
+            // a PATH that changed after the install) from putting Node 20 back.
+            const root = path.resolve(__dirname, '..', '..', '..', '..');
+
+            for (const [file, name] of [
+                ['deploy/scripts/install.sh', 'MIN_NODE_MAJOR'],
+                ['deploy/launcher/common.sh', 'OPEN_MT2_MIN_NODE_MAJOR'],
+            ] as const) {
+                const value = readShellNumber(path.join(root, file), name);
+
+                expect(value, `${file} declares ${value}, nodeVersion.ts declares ${MIN_NODE_MAJOR}`).to.equal(
+                    MIN_NODE_MAJOR,
+                );
+            }
         });
     });
 
