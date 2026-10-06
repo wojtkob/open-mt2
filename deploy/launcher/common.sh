@@ -18,7 +18,13 @@ if [ -z "${OPEN_MT2_HOME:-}" ]; then
 fi
 export OPEN_MT2_HOME
 
-OPEN_MT2_MIN_NODE_MAJOR=20
+# Must agree with package.json#engines.node, src/core/util/nodeVersion.ts and
+# deploy/scripts/install.sh. test/unit/core/util/nodeVersion.test.ts reads all
+# four and fails if they drift: install.sh will happily replace a system Node 20
+# with a private 22.x runtime, but this check is what stops an override such as
+# OPEN_MT2_NODE=/usr/bin/node from picking the old one back up, so a launch here
+# on 20 would otherwise fail later inside Node instead of at the launcher.
+OPEN_MT2_MIN_NODE_MAJOR=22
 
 open_mt2_resolve_node() {
     if [ -n "${OPEN_MT2_NODE:-}" ]; then
@@ -43,7 +49,7 @@ open_mt2_resolve_node() {
     cat >&2 <<'EOF'
 open-mt2: no Node.js runtime found.
 
-Install Node.js 20 or newer, for example:
+Install Node.js 22 or newer, for example:
   sudo apt-get install -y nodejs
 or re-run install.sh, which downloads a private runtime into
 /opt/open-mt2/runtime when the system one is missing or too old.
